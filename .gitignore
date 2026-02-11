@@ -1,1 +1,27 @@
+# Rust
 /target
+Cargo.lock
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# gha-ts generated files
+generated/
+.gha-ts-cache.json
+
+# Node.js (for npm wrapper)
+node_modules/
+dist/
+*.tgz
+
+# Test artifacts
+*.log
+coverage/
