@@ -4,3 +4,21 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+anyhow = "1.0.101"
+clap = "4.5.58"
+colored = "3.1.1"
+indicatif = "0.18.3"
+notify = "8.2.0"
+oxc_allocator = "0.113.0"
+oxc_ast = "0.113.0"
+oxc_parser = "0.113.0"
+oxc_span = "0.113.0"
+reqwest = "0.13.2"
+serde = "1.0.228"
+serde_json = "1.0.149"
+serde_yaml = "0.9.34"
+thiserror = "2.0.18"
+tokio = "1.49.0"
+
+[dev-dependencies]
+tempfile = "3.25.0"
