@@ -230,14 +230,13 @@ impl ActionRefExtractor {
 
     fn visit_call_expression<'a>(&mut self, call: &CallExpression<'a>) {
         // Check if this is a getAction call
-        if let Expression::Identifier(ident) = &call.callee {
-            if ident.name == "getAction" {
-                if let Some(first_arg) = call.arguments.first() {
-                    if let Argument::StringLiteral(lit) = first_arg {
-                        self.action_refs.insert(lit.value.to_string());
-                    }
-                }
+        match (&call.callee, call.arguments.first()) {
+            (Expression::Identifier(ident), Some(Argument::StringLiteral(lit)))
+                if ident.name == "getAction" =>
+            {
+                self.action_refs.insert(lit.value.to_string());
             }
+            _ => {}
         }
 
         // Visit callee (for chained calls like getAction("...")(...))
