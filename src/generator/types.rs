@@ -12,6 +12,9 @@ pub fn generate_type_definition(action_ref: &str, metadata: &ActionMetadata) -> 
         action_ref
     ));
 
+    // Import JobStep from base
+    output.push_str("import type { JobStep } from './base';\n\n");
+
     // Generate interface for inputs
     let inputs_interface = generate_inputs_interface(&interface_name, metadata);
     output.push_str(&inputs_interface);

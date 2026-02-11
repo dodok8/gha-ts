@@ -11,6 +11,7 @@ use crate::fetcher::GitHubFetcher;
 use crate::cache::Cache;
 
 use self::types::generate_type_definition;
+use self::templates::{BASE_TYPES_TEMPLATE, GET_ACTION_BASE_TEMPLATE};
 
 pub struct TypeGenerator {
     fetcher: GitHubFetcher,
@@ -30,6 +31,10 @@ impl TypeGenerator {
 
         let mut generated_files = Vec::new();
 
+        // Generate base types first
+        let base_path = self.generate_base_types().await?;
+        generated_files.push(base_path);
+
         for action_ref in action_refs {
             match self.generate_type_for_ref(action_ref).await {
                 Ok(path) => {
@@ -45,6 +50,19 @@ impl TypeGenerator {
         self.generate_index_file(&generated_files).await?;
 
         Ok(generated_files)
+    }
+
+    async fn generate_base_types(&self) -> Result<PathBuf> {
+        let content = format!(
+            "{}\n{}",
+            BASE_TYPES_TEMPLATE,
+            GET_ACTION_BASE_TEMPLATE
+        );
+
+        let file_path = self.output_dir.join("base.d.ts");
+        fs::write(&file_path, content).await?;
+
+        Ok(file_path)
     }
 
     async fn generate_type_for_ref(&self, action_ref: &str) -> Result<PathBuf> {
@@ -64,8 +82,10 @@ impl TypeGenerator {
 
         for file_path in generated_files {
             if let Some(stem) = file_path.file_stem() {
+                // Remove .d suffix for TypeScript imports (e.g., "base.d" -> "base")
                 let module_name = stem.to_string_lossy();
-                exports.push(format!("export * from './{}';", module_name));
+                let clean_name = module_name.strip_suffix(".d").unwrap_or(&module_name);
+                exports.push(format!("export * from './{}';", clean_name));
             }
         }
 
