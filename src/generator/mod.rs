@@ -153,7 +153,7 @@ pub fn action_ref_to_filename(action_ref: &str) -> String {
 pub fn action_ref_to_interface_name(action_ref: &str) -> String {
     // "actions/checkout@v4" -> "ActionsCheckoutV4"
     action_ref
-        .split(|c| c == '/' || c == '@' || c == '-' || c == '.')
+        .split(['/', '@', '-', '.'])
         .filter(|s| !s.is_empty())
         .map(|s| {
             let mut chars = s.chars();

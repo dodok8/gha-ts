@@ -152,7 +152,7 @@ impl GitHubFetcher {
         // Try action.yml first
         let url = action_ref.to_raw_url();
         match self.fetch_with_retry(&url).await {
-            Ok(content) => return Ok(content),
+            Ok(content) => Ok(content),
             Err(_) => {
                 // Try action.yaml as fallback
                 let url_yaml = action_ref.to_raw_url_yaml();

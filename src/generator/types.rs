@@ -57,7 +57,7 @@ fn generate_inputs_interface(interface_name: &str, metadata: &ActionMetadata) ->
         }
     }
 
-    output.push_str("}");
+    output.push('}');
 
     output
 }

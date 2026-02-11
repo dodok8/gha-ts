@@ -189,12 +189,12 @@ fn validate_yaml(yaml: &str) -> Result<()> {
         .ok_or_else(|| anyhow::anyhow!("Workflow must be a YAML mapping"))?;
 
     // Check for required 'on' field
-    if !mapping.contains_key(&serde_yaml::Value::String("on".to_string())) {
+    if !mapping.contains_key(serde_yaml::Value::String("on".to_string())) {
         return Err(anyhow::anyhow!("Workflow missing required 'on' field"));
     }
 
     // Check for required 'jobs' field
-    if !mapping.contains_key(&serde_yaml::Value::String("jobs".to_string())) {
+    if !mapping.contains_key(serde_yaml::Value::String("jobs".to_string())) {
         return Err(anyhow::anyhow!("Workflow missing required 'jobs' field"));
     }
 

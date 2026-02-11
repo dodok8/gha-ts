@@ -6,6 +6,7 @@ use serde::{Deserialize, Serialize};
 const CONFIG_FILE: &str = ".gha-ts.toml";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Default)]
 pub struct Config {
     #[serde(default)]
     pub project: ProjectConfig,
@@ -55,16 +56,6 @@ pub struct GitHubConfig {
     pub token: Option<String>,
 }
 
-impl Default for Config {
-    fn default() -> Self {
-        Self {
-            project: ProjectConfig::default(),
-            watch: WatchConfig::default(),
-            build: BuildConfig::default(),
-            github: GitHubConfig::default(),
-        }
-    }
-}
 
 impl Default for ProjectConfig {
     fn default() -> Self {
