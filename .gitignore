@@ -1,6 +1,5 @@
 # Rust
 /target
-Cargo.lock
 
 # IDE
 .idea/
@@ -21,6 +20,9 @@ generated/
 node_modules/
 dist/
 *.tgz
+
+# npm platform binaries (populated by CI)
+npm/platform-*/bin/
 
 # Test artifacts
 *.log
