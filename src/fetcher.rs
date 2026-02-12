@@ -124,7 +124,7 @@ impl GitHubFetcher {
     pub fn new(cache: Cache) -> Self {
         let client = reqwest::Client::builder()
             .timeout(Duration::from_secs(30))
-            .user_agent("gha-ts")
+            .user_agent("gaji")
             .build()
             .expect("Failed to create HTTP client");
 

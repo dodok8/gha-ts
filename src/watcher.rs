@@ -68,7 +68,7 @@ fn should_process_event(event: &Event) -> bool {
                 let path_str = path.to_string_lossy();
                 if !path_str.contains("node_modules")
                     && !path_str.contains("generated")
-                    && !path_str.contains(".gha-ts-cache")
+                    && !path_str.contains(".gaji-cache")
                 {
                     return true;
                 }

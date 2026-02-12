@@ -1,8 +1,8 @@
 use clap::{Parser, Subcommand};
 
 #[derive(Parser)]
-#[command(name = "gha-ts")]
-#[command(author = "gha-ts contributors")]
+#[command(name = "gaji")]
+#[command(author = "gaji contributors")]
 #[command(version)]
 #[command(about = "Type-safe GitHub Actions workflows in TypeScript", long_about = None)]
 pub struct Cli {
@@ -12,7 +12,7 @@ pub struct Cli {
 
 #[derive(Subcommand)]
 pub enum Commands {
-    /// Initialize a new gha-ts project
+    /// Initialize a new gaji project
     Init {
         /// Overwrite existing files
         #[arg(long)]
