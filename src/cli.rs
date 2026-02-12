@@ -51,6 +51,10 @@ pub enum Commands {
         /// Output directory for YAML files
         #[arg(short, long, default_value = ".github/workflows")]
         output: String,
+
+        /// Preview YAML output without writing files
+        #[arg(long)]
+        dry_run: bool,
     },
 
     /// Add a new action and generate types

@@ -10,19 +10,23 @@ use crate::executor;
 pub struct WorkflowBuilder {
     input_dir: PathBuf,
     output_dir: PathBuf,
+    dry_run: bool,
 }
 
 impl WorkflowBuilder {
-    pub fn new(input_dir: PathBuf, output_dir: PathBuf) -> Self {
+    pub fn new(input_dir: PathBuf, output_dir: PathBuf, dry_run: bool) -> Self {
         Self {
             input_dir,
             output_dir,
+            dry_run,
         }
     }
 
     pub async fn build_all(&self) -> Result<Vec<PathBuf>> {
-        // Ensure output directory exists
-        fs::create_dir_all(&self.output_dir).await?;
+        // Ensure output directory exists (skip in dry-run mode)
+        if !self.dry_run {
+            fs::create_dir_all(&self.output_dir).await?;
+        }
 
         // Find all workflow files
         let workflow_files = self.find_workflow_files().await?;
@@ -146,6 +150,21 @@ impl WorkflowBuilder {
         for build_output in &build_outputs {
             let yaml_content = json_to_yaml(&build_output.json)?;
 
+            if build_output.output_type == "workflow" {
+                validate_workflow_yaml(&yaml_content)?;
+            }
+
+            if self.dry_run {
+                // Print YAML to stdout without writing files
+                println!(
+                    "--- {} ({}) ---",
+                    build_output.id,
+                    build_output.output_type
+                );
+                print!("{}", yaml_content);
+                continue;
+            }
+
             // Determine output directory based on type
             let out_dir = if build_output.output_type == "action" {
                 let action_dir = self.output_dir.parent().unwrap_or(Path::new(".")).join("actions").join(&build_output.id);
@@ -159,7 +178,6 @@ impl WorkflowBuilder {
             let output_path = if build_output.output_type == "action" {
                 out_dir.join("action.yml")
             } else {
-                validate_workflow_yaml(&yaml_content)?;
                 out_dir.join(format!("{}.yml", build_output.id))
             };
 

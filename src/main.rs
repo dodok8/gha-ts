@@ -28,8 +28,12 @@ async fn main() -> Result<()> {
         Commands::Dev { dir, watch } => {
             cmd_dev(&dir, watch).await?;
         }
-        Commands::Build { input, output } => {
-            cmd_build(&input, &output).await?;
+        Commands::Build {
+            input,
+            output,
+            dry_run,
+        } => {
+            cmd_build(&input, &output, dry_run).await?;
         }
         Commands::Add { action } => {
             cmd_add(&action).await?;
@@ -109,10 +113,14 @@ async fn cmd_dev(dir: &str, watch: bool) -> Result<()> {
     Ok(())
 }
 
-async fn cmd_build(input: &str, output: &str) -> Result<()> {
-    println!("{} Building workflows...\n", "🔨".cyan());
+async fn cmd_build(input: &str, output: &str, dry_run: bool) -> Result<()> {
+    if dry_run {
+        println!("{} Dry run: previewing workflows...\n", "🔨".cyan());
+    } else {
+        println!("{} Building workflows...\n", "🔨".cyan());
+    }
 
-    let builder = WorkflowBuilder::new(PathBuf::from(input), PathBuf::from(output));
+    let builder = WorkflowBuilder::new(PathBuf::from(input), PathBuf::from(output), dry_run);
 
     let built = builder.build_all().await?;
 
