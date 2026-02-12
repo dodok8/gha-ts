@@ -7,6 +7,7 @@ use colored::Colorize;
 use gaji::builder::WorkflowBuilder;
 use gaji::cache::Cache;
 use gaji::cli::{Cli, Commands};
+use gaji::config::Config;
 use gaji::generator::TypeGenerator;
 use gaji::init::{self, InitOptions};
 use gaji::parser;
@@ -65,6 +66,10 @@ async fn cmd_init(
 async fn cmd_dev(dir: &str, watch: bool) -> Result<()> {
     println!("{} Starting development mode...\n", "🚀".green());
 
+    let config = Config::load()?;
+    let token = config.resolve_token();
+    let api_url = config.resolve_api_url();
+
     // Initial scan
     let path = PathBuf::from(dir);
     if path.exists() {
@@ -83,7 +88,7 @@ async fn cmd_dev(dir: &str, watch: bool) -> Result<()> {
             );
 
             let cache = Cache::load_or_create()?;
-            let generator = TypeGenerator::new(cache, PathBuf::from("generated"));
+            let generator = TypeGenerator::new(cache, PathBuf::from("generated"), token, api_url);
             generator.generate_types_for_refs(&all_refs).await?;
 
             println!("{} Types generated!\n", "✨".green());
@@ -123,8 +128,12 @@ async fn cmd_build(input: &str, output: &str, dry_run: bool) -> Result<()> {
 async fn cmd_add(action: &str) -> Result<()> {
     println!("{} Adding action: {}\n", "📦".cyan(), action);
 
+    let config = Config::load()?;
+    let token = config.resolve_token();
+    let api_url = config.resolve_api_url();
+
     let cache = Cache::load_or_create()?;
-    let generator = TypeGenerator::new(cache, PathBuf::from("generated"));
+    let generator = TypeGenerator::new(cache, PathBuf::from("generated"), token, api_url);
 
     let mut refs = std::collections::HashSet::new();
     refs.insert(action.to_string());

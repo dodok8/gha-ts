@@ -15,6 +15,7 @@ Thumbs.db
 # gaji generated files
 generated/
 .gaji-cache.json
+.gaji.local.toml
 
 # Node.js (for npm wrapper)
 node_modules/

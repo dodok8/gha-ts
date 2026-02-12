@@ -26,7 +26,7 @@ const release = new Job("ubuntu-latest", {
         command: "release",
       },
       env: {
-        GITHUB_TOKEN: "${{ secrets.GITHUB_TOKEN }}",
+        GITHUB_TOKEN: "${{ secrets.PAT }}",
       },
     })
   );

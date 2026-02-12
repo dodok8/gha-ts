@@ -154,4 +154,108 @@ mod tests {
         assert_eq!(data.version, 0);
         assert!(data.entries.is_empty());
     }
+
+    #[test]
+    fn test_should_regenerate_missing_entry() {
+        let data = CacheData {
+            version: 1,
+            entries: HashMap::new(),
+        };
+        let cache = Cache {
+            data,
+            cache_file: PathBuf::from(".test-cache.json"),
+        };
+        assert!(cache.should_regenerate("actions/checkout@v4", "somehash"));
+    }
+
+    #[test]
+    fn test_should_regenerate_same_hash() {
+        let hash = calculate_hash("content");
+        let mut entries = HashMap::new();
+        entries.insert(
+            "actions/checkout@v4".to_string(),
+            CacheEntry {
+                action_ref: "actions/checkout@v4".to_string(),
+                content_hash: hash.clone(),
+                generated_at: 0,
+                metadata: ActionMetadata {
+                    name: "Checkout".to_string(),
+                    description: None,
+                    inputs: None,
+                    outputs: None,
+                    runs: None,
+                },
+            },
+        );
+        let cache = Cache {
+            data: CacheData {
+                version: 1,
+                entries,
+            },
+            cache_file: PathBuf::from(".test-cache.json"),
+        };
+        assert!(!cache.should_regenerate("actions/checkout@v4", &hash));
+    }
+
+    #[test]
+    fn test_should_regenerate_different_hash() {
+        let mut entries = HashMap::new();
+        entries.insert(
+            "actions/checkout@v4".to_string(),
+            CacheEntry {
+                action_ref: "actions/checkout@v4".to_string(),
+                content_hash: "oldhash".to_string(),
+                generated_at: 0,
+                metadata: ActionMetadata {
+                    name: "Checkout".to_string(),
+                    description: None,
+                    inputs: None,
+                    outputs: None,
+                    runs: None,
+                },
+            },
+        );
+        let cache = Cache {
+            data: CacheData {
+                version: 1,
+                entries,
+            },
+            cache_file: PathBuf::from(".test-cache.json"),
+        };
+        assert!(cache.should_regenerate("actions/checkout@v4", "newhash"));
+    }
+
+    #[test]
+    fn test_cache_save_and_load_roundtrip() {
+        let dir = tempfile::TempDir::new().unwrap();
+        let cache_file = dir.path().join("cache.json");
+
+        let cache = Cache {
+            data: CacheData {
+                version: 1,
+                entries: HashMap::new(),
+            },
+            cache_file: cache_file.clone(),
+        };
+
+        let metadata = ActionMetadata {
+            name: "Test Action".to_string(),
+            description: Some("A test".to_string()),
+            inputs: None,
+            outputs: None,
+            runs: None,
+        };
+        cache
+            .set("test/action@v1", &metadata, "yaml content")
+            .unwrap();
+
+        // Read back the file and verify
+        let content = std::fs::read_to_string(&cache_file).unwrap();
+        let loaded: CacheData = serde_json::from_str(&content).unwrap();
+        assert!(loaded.entries.contains_key("test/action@v1"));
+        assert_eq!(
+            loaded.entries["test/action@v1"].metadata.name,
+            "Test Action"
+        );
+    }
 }

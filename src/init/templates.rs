@@ -64,4 +64,5 @@ const workflow = new Workflow({
 workflow.build("ci");
 "#;
 
-pub const GITIGNORE_SECTION: &str = "\n# gaji generated files\ngenerated/\n.gaji-cache.json\n";
+pub const GITIGNORE_SECTION: &str =
+    "\n# gaji generated files\ngenerated/\n.gaji-cache.json\n.gaji.local.toml\n";
