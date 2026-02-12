@@ -94,7 +94,7 @@ fn default_workflows_dir() -> String {
 }
 
 fn default_output_dir() -> String {
-    ".github/workflows".to_string()
+    ".github".to_string()
 }
 
 fn default_generated_dir() -> String {
@@ -191,7 +191,7 @@ mod tests {
     fn test_default_config() {
         let config = Config::default();
         assert_eq!(config.project.workflows_dir, "workflows");
-        assert_eq!(config.project.output_dir, ".github/workflows");
+        assert_eq!(config.project.output_dir, ".github");
         assert_eq!(config.project.generated_dir, "generated");
         assert_eq!(config.watch.debounce_ms, 300);
         assert!(config.build.validate);
@@ -235,7 +235,7 @@ workflows_dir = "my_workflows"
         let config: Config = toml::from_str(toml_str).unwrap();
         assert_eq!(config.project.workflows_dir, "my_workflows");
         // Other fields should use defaults
-        assert_eq!(config.project.output_dir, ".github/workflows");
+        assert_eq!(config.project.output_dir, ".github");
         assert_eq!(config.project.generated_dir, "generated");
         assert_eq!(config.watch.debounce_ms, 300);
         assert!(config.build.validate);

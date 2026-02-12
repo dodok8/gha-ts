@@ -49,7 +49,7 @@ pub enum Commands {
         input: String,
 
         /// Output directory for YAML files
-        #[arg(short, long, default_value = ".github/workflows")]
+        #[arg(short, long, default_value = ".github")]
         output: String,
 
         /// Preview YAML output without writing files
