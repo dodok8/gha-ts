@@ -29,10 +29,6 @@ pub fn generate_type_definition(action_ref: &str, metadata: &ActionMetadata) -> 
         }
     }
 
-    // Generate getAction overload
-    let get_action_overload = generate_get_action_overload(action_ref, &interface_name, metadata);
-    output.push_str(&get_action_overload);
-
     output
 }
 
@@ -131,26 +127,6 @@ fn generate_outputs_interface(
     output.push('}');
 
     output
-}
-
-fn generate_get_action_overload(
-    action_ref: &str,
-    interface_name: &str,
-    _metadata: &ActionMetadata,
-) -> String {
-    format!(
-        r#"export function getAction(
-    ref: '{}'
-): (config?: {{
-    name?: string;
-    with?: {}Inputs;
-    id?: string;
-    if?: string;
-    env?: Record<string, string>;
-}}) => JobStep;
-"#,
-        action_ref, interface_name
-    )
 }
 
 fn infer_type_from_input(input: &ActionInput) -> &'static str {
