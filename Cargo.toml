@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2021"
 description = "Type-safe GitHub Actions workflows in TypeScript"
 license = "MIT"
-repository = "https://github.com/gaji-ts/gaji"
+repository = "https://github.com/dodok8/gaji"
 keywords = ["github-actions", "typescript", "ci-cd", "workflow"]
 categories = ["development-tools", "command-line-utilities"]
 
@@ -31,6 +31,12 @@ serde_yaml = "0.9.34"
 thiserror = "2.0.18"
 tokio = { version = "1.49.0", features = ["full"] }
 toml = "0.8"
+
+[profile.release]
+opt-level = "z"
+lto = true
+codegen-units = 1
+strip = true
 
 [dev-dependencies]
 tempfile = "3.25.0"

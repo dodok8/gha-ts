@@ -1,0 +1,49 @@
+{
+  "name": "gaji",
+  "version": "0.1.0",
+  "description": "Type-safe GitHub Actions workflows in TypeScript",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/dodok8/gaji"
+  },
+  "bin": {
+    "gaji": "bin/gaji.js"
+  },
+  "main": "lib/index.js",
+  "types": "lib/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./lib/index.d.ts",
+      "default": "./lib/index.js"
+    },
+    "./base": {
+      "types": "./lib/base.d.ts"
+    }
+  },
+  "files": [
+    "bin/",
+    "lib/",
+    "scripts/"
+  ],
+  "scripts": {
+    "postinstall": "node scripts/postinstall.js"
+  },
+  "publishConfig": {
+    "provenance": true
+  },
+  "optionalDependencies": {
+    "@gaji/linux-x64": "0.1.0",
+    "@gaji/linux-arm64": "0.1.0",
+    "@gaji/darwin-x64": "0.1.0",
+    "@gaji/darwin-arm64": "0.1.0",
+    "@gaji/win32-x64": "0.1.0"
+  },
+  "keywords": [
+    "github-actions",
+    "typescript",
+    "ci-cd",
+    "workflow",
+    "type-safe"
+  ]
+}

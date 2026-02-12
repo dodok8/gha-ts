@@ -4,16 +4,22 @@ Type-safe GitHub Actions workflows in TypeScript.
 
 ## Overview
 
-`gaji` is a CLI tool that allows developers to write GitHub Actions workflows in TypeScript with full type safety, then compile them to YAML.
+`gaji` is a CLI tool that allows developers to write GitHub Actions workflows in TypeScript with full type safety, then compile them to YAML. It automatically fetches `action.yml` definitions and generates typed wrappers, so you get autocomplete and type checking for every action input and output.
 
 ## Features
 
-- TypeScript-based workflow authoring
-- Automatic type generation from action.yml files
-- File watching for development
+- TypeScript-based workflow authoring with full type safety
+- Automatic type generation from `action.yml` files
+- File watching for development (`--watch`)
 - Single binary distribution (Rust)
 
 ## Installation
+
+### From npm
+
+```bash
+npm install -D gaji
+```
 
 ### From cargo
 
@@ -21,23 +27,18 @@ Type-safe GitHub Actions workflows in TypeScript.
 cargo install gaji
 ```
 
-### From npm
-
-```bash
-npm install -g gaji
-```
-
 ## Quick Start
 
 ```bash
-# Initialize a new project
+# Initialize a new project (creates workflows/ and generated/ directories)
 gaji init
 
-# Run a one-time dev scan
-gaji dev
+# Add actions and generate types
+gaji add actions/checkout@v5
+gaji add actions/setup-node@v4
 
-# Run dev mode and keep watching for changes
-gaji dev --watch
+# Run a one-time dev scan to generate types
+gaji dev
 
 # Build workflows to YAML
 gaji build
@@ -50,30 +51,31 @@ gaji build
 Create TypeScript files in the `workflows/` directory:
 
 ```typescript
-import { Workflow, Job } from 'gaji'
-import { getAction } from 'gaji/actions'
+import { getAction, Job, Workflow } from "../generated/index.js";
 
-const checkout = getAction('actions/checkout@v4')
-const setupNode = getAction('actions/setup-node@v4')
+const checkout = getAction("actions/checkout@v5");
+const setupNode = getAction("actions/setup-node@v4");
 
-export const ci = new Workflow('ci', {
-  name: 'CI',
+const build = new Job("ubuntu-latest")
+  .addStep(checkout({}))
+  .addStep(setupNode({
+    with: { "node-version": "22" },
+  }))
+  .addStep({ name: "Install dependencies", run: "npm ci" })
+  .addStep({ name: "Run tests", run: "npm test" });
+
+const workflow = new Workflow({
+  name: "CI",
   on: {
-    push: { branches: ['main'] },
-    pull_request: { branches: ['main'] },
+    push: { branches: ["main"] },
+    pull_request: { branches: ["main"] },
   },
-})
-  .addJob(
-    new Job('build', 'ubuntu-latest')
-      .addStep(checkout({ name: 'Checkout code' }))
-      .addStep(setupNode({
-        name: 'Setup Node.js',
-        with: { 'node-version': '20' },
-      }))
-      .addStep({ name: 'Install dependencies', run: 'npm ci' })
-      .addStep({ name: 'Run tests', run: 'npm test' })
-  )
+}).addJob("build", build);
+
+workflow.build("ci");
 ```
+
+Run `gaji build` and it outputs `.github/workflows/ci.yml`.
 
 ### Commands
 

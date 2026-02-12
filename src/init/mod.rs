@@ -360,7 +360,7 @@ fn print_next_steps() {
     println!("  2. Run: gaji dev");
     println!("  3. Run: gaji build");
     println!();
-    println!("Learn more: https://github.com/gaji-ts/gaji");
+    println!("Learn more: https://github.com/dodok8/gaji");
 }
 
 #[cfg(test)]
