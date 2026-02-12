@@ -254,7 +254,7 @@ const publishCrates = new Job("ubuntu-latest", {
       'echo "::endgroup::"',
       "",
       "# Step 3: Publish",
-      'CARGO_REGISTRY_TOKEN="$CRATES_TOKEN" cargo publish',
+      'CARGO_REGISTRY_TOKEN="$CRATES_TOKEN" cargo publish --allow-dirty',
     ].join("\n"),
   });
 
