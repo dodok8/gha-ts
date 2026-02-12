@@ -158,4 +158,49 @@ mod tests {
         assert_eq!(config.watch.debounce_ms, 300);
         assert!(config.build.validate);
     }
+
+    #[test]
+    fn test_parse_full_toml() {
+        let toml_str = r#"
+[project]
+workflows_dir = "custom_workflows"
+output_dir = "custom_output"
+generated_dir = "custom_generated"
+
+[watch]
+debounce_ms = 500
+ignored_patterns = ["dist", "tmp"]
+
+[build]
+validate = false
+format = false
+
+[github]
+token = "ghp_test123"
+"#;
+        let config: Config = toml::from_str(toml_str).unwrap();
+        assert_eq!(config.project.workflows_dir, "custom_workflows");
+        assert_eq!(config.project.output_dir, "custom_output");
+        assert_eq!(config.project.generated_dir, "custom_generated");
+        assert_eq!(config.watch.debounce_ms, 500);
+        assert!(!config.build.validate);
+        assert!(!config.build.format);
+        assert_eq!(config.github.token, Some("ghp_test123".to_string()));
+    }
+
+    #[test]
+    fn test_parse_partial_toml_uses_defaults() {
+        let toml_str = r#"
+[project]
+workflows_dir = "my_workflows"
+"#;
+        let config: Config = toml::from_str(toml_str).unwrap();
+        assert_eq!(config.project.workflows_dir, "my_workflows");
+        // Other fields should use defaults
+        assert_eq!(config.project.output_dir, ".github/workflows");
+        assert_eq!(config.project.generated_dir, "generated");
+        assert_eq!(config.watch.debounce_ms, 300);
+        assert!(config.build.validate);
+        assert!(config.github.token.is_none());
+    }
 }

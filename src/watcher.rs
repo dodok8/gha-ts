@@ -149,3 +149,78 @@ fn generator_has_type(action_ref: &str) -> bool {
     let path = std::path::Path::new("generated").join(&filename);
     path.exists()
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use notify::event::{CreateKind, ModifyKind, RemoveKind};
+    use std::path::PathBuf;
+
+    fn make_event(kind: EventKind, paths: Vec<PathBuf>) -> Event {
+        Event {
+            kind,
+            paths,
+            attrs: Default::default(),
+        }
+    }
+
+    #[test]
+    fn test_should_process_ts_create() {
+        let event = make_event(
+            EventKind::Create(CreateKind::File),
+            vec![PathBuf::from("/project/workflows/ci.ts")],
+        );
+        assert!(should_process_event(&event));
+    }
+
+    #[test]
+    fn test_should_process_tsx_modify() {
+        let event = make_event(
+            EventKind::Modify(ModifyKind::Data(notify::event::DataChange::Content)),
+            vec![PathBuf::from("/project/workflows/component.tsx")],
+        );
+        assert!(should_process_event(&event));
+    }
+
+    #[test]
+    fn test_should_ignore_non_ts() {
+        let event = make_event(
+            EventKind::Create(CreateKind::File),
+            vec![PathBuf::from("/project/src/main.rs")],
+        );
+        assert!(!should_process_event(&event));
+
+        let event_json = make_event(
+            EventKind::Modify(ModifyKind::Data(notify::event::DataChange::Content)),
+            vec![PathBuf::from("/project/config.json")],
+        );
+        assert!(!should_process_event(&event_json));
+    }
+
+    #[test]
+    fn test_should_ignore_node_modules() {
+        let event = make_event(
+            EventKind::Create(CreateKind::File),
+            vec![PathBuf::from("/project/node_modules/pkg/index.ts")],
+        );
+        assert!(!should_process_event(&event));
+    }
+
+    #[test]
+    fn test_should_ignore_generated() {
+        let event = make_event(
+            EventKind::Create(CreateKind::File),
+            vec![PathBuf::from("/project/generated/types.ts")],
+        );
+        assert!(!should_process_event(&event));
+    }
+
+    #[test]
+    fn test_should_ignore_delete_event() {
+        let event = make_event(
+            EventKind::Remove(RemoveKind::File),
+            vec![PathBuf::from("/project/workflows/ci.ts")],
+        );
+        assert!(!should_process_event(&event));
+    }
+}
