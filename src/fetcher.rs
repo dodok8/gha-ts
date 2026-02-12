@@ -258,4 +258,28 @@ mod tests {
         assert!(ActionRef::parse("no-at-sign").is_err());
         assert!(ActionRef::parse("only/one@").is_ok()); // Empty ref is technically valid
     }
+
+    #[test]
+    fn test_invalid_action_ref_no_owner() {
+        // Single segment before @ should fail (no owner/repo split)
+        let result = ActionRef::parse("checkout@v4");
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("at least owner/repo"));
+    }
+
+    #[test]
+    fn test_raw_url_with_path() {
+        let action_ref = ActionRef::parse("owner/repo/sub/path@main").unwrap();
+        assert_eq!(
+            action_ref.to_raw_url(),
+            "https://raw.githubusercontent.com/owner/repo/sub/path/main/action.yml"
+        );
+        assert_eq!(
+            action_ref.to_raw_url_yaml(),
+            "https://raw.githubusercontent.com/owner/repo/sub/path/main/action.yaml"
+        );
+    }
 }

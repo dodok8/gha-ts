@@ -2006,187 +2006,104 @@ Found 3 existing workflow(s):
 
 ---
 
-## Phase 8: Testing
+## Phase 8: Testing (코드 레벨 유닛/통합 테스트)
 
-### 8.1 Unit Tests
-- [ ] Parser tests
-  ```rust
-  #[cfg(test)]
-  mod parser_tests {
-      use super::*;
-      
-      #[test]
-      fn test_extract_simple_call() {
-          let source = r#"const x = getAction("actions/checkout@v4")"#;
-          let refs = extract_action_refs(source).unwrap();
-          assert!(refs.contains("actions/checkout@v4"));
-      }
-      
-      #[test]
-      fn test_extract_nested() { /* ... */ }
-      
-      #[test]
-      fn test_invalid_syntax() { /* ... */ }
-  }
-  ```
+### 현재 상태 (52 tests)
+| 모듈 | 테스트 수 | 상태 |
+|------|----------|------|
+| init/mod.rs | 17 | Good |
+| init/migration.rs | 11 | Good |
+| executor.rs | 7 | Good |
+| parser/mod.rs | 5 | OK |
+| fetcher.rs | 4 | Partial |
+| generator/types.rs | 3 | Partial |
+| generator/mod.rs | 2 | Minimal |
+| cache.rs | 2 | Minimal |
+| config.rs | 1 | Minimal |
+| **builder.rs** | **0** | **Critical** |
+| **watcher.rs** | **0** | **Critical** |
 
-- [ ] Type generator tests
-  ```rust
-  #[test]
-  fn test_generate_interface() {
-      let mut inputs = HashMap::new();
-      inputs.insert("repository".to_string(), ActionInput {
-          description: Some("Repo name".to_string()),
-          required: Some(false),
-          default: Some("${{ github.repository }}".to_string()),
-      });
-      
-      let result = generate_input_interface("Checkout", &inputs);
-      assert!(result.contains("repository?:"));
-      assert!(result.contains("@default"));
-  }
-  ```
+### 8.1 builder.rs 유닛 테스트 (~12개)
+- [ ] `json_to_yaml()` - 정상 JSON→YAML 변환
+- [ ] `json_to_yaml()` - 잘못된 JSON 에러 처리
+- [ ] `validate_workflow_yaml()` - 정상 워크플로우 통과
+- [ ] `validate_workflow_yaml()` - `on` 필드 누락 에러
+- [ ] `validate_workflow_yaml()` - `jobs` 필드 누락 에러
+- [ ] `validate_workflow_yaml()` - mapping이 아닌 YAML 에러
+- [ ] `should_write_file()` - 새 파일 (존재하지 않음) → true
+- [ ] `should_write_file()` - 동일 내용 → false
+- [ ] `should_write_file()` - 변경된 내용 → true
+- [ ] `timestamp_now()` - ISO 8601 형식 검증
+- [ ] `find_workflow_files()` - .ts 파일 탐색, .d.ts 제외
+- [ ] `build_all()` - 빈 디렉토리에서 빈 결과
 
-- [ ] YAML parsing tests
-- [ ] Cache logic tests
-- [ ] GitHub API client tests (mock)
+### 8.2 watcher.rs 유닛 테스트 (~6개)
+- [ ] `should_process_event()` - .ts Create 이벤트 → true
+- [ ] `should_process_event()` - .tsx Modify 이벤트 → true
+- [ ] `should_process_event()` - .rs 파일 → false
+- [ ] `should_process_event()` - node_modules 내 .ts → false
+- [ ] `should_process_event()` - generated/ 내 .ts → false
+- [ ] `should_process_event()` - Delete 이벤트 → false
 
-### 8.2 Integration Tests
-- [ ] End-to-end scenarios
-  ```rust
-  #[tokio::test]
-  async fn test_full_workflow() {
-      let temp_dir = TempDir::new()?;
-      
-      // 1. init
-      init_project_in(temp_dir.path()).await?;
-      
-      // 2. Create workflow file
-      let workflow_path = temp_dir.path().join("workflows/test.ts");
-      fs::write(&workflow_path, TEST_WORKFLOW_SOURCE)?;
-      
-      // 3. Generate types
-      let refs = analyze_file(&workflow_path).await?;
-      generate_types_for_refs(&refs).await?;
-      
-      // 4. Build YAML
-      let yaml = build_workflow(&workflow_path).await?;
-      
-      // 5. Validate
-      assert!(yaml.contains("name: Test"));
-  }
-  ```
+### 8.3 기존 모듈 테스트 보강
+- [ ] cache.rs: `load_or_create()` tempdir 기본값 생성 (+1)
+- [ ] cache.rs: `should_regenerate()` 해시 비교 (+1)
+- [ ] cache.rs: `save()` → `load()` 직렬화 왕복 (+1)
+- [ ] config.rs: TOML 문자열 파싱 (+1)
+- [ ] config.rs: 부분 설정 시 기본값 폴백 (+1)
+- [ ] fetcher.rs: 추가 에러 케이스 (+1)
+- [ ] fetcher.rs: 경로 포함 action ref (+1)
 
-- [ ] Test with real GitHub Actions
-  - [ ] Verify generated YAML actually runs
+### 8.4 통합 테스트 (`tests/integration.rs`)
+- [ ] builder + executor 파이프라인: TS → QuickJS → JSON → YAML 검증
+- [ ] build_all 다중 출력: 여러 workflow.build() 호출시 다중 YAML
+- [ ] YAML 유효성: 생성된 YAML이 GitHub Actions 스키마 준수
 
-- [ ] Test with various actions
-  - [ ] `actions/checkout@v4`
-  - [ ] `actions/setup-node@v4`
-  - [ ] `actions/cache@v3`
-  - [ ] Community actions
-
-### 8.3 Test Coverage
-- [ ] Setup `cargo-tarpaulin`
-  ```toml
-  # Cargo.toml
-  [dev-dependencies]
-  tarpaulin = "0.27"
-  ```
-
-- [ ] Measure coverage in CI
-  ```yaml
-  - name: Test with coverage
-    run: cargo tarpaulin --out Xml
-  
-  - name: Upload coverage
-    uses: codecov/codecov-action@v3
-  ```
-
-- [ ] Minimum coverage goal: 80%
-
-### 8.4 Benchmarks (Optional)
-- [ ] Measure parsing performance
-- [ ] Test large projects (100+ workflows)
-- [ ] Profile memory usage
+**검증**: `cargo test` 전체 통과, 테스트 ~77개+ (현재 52 + 약 25 추가)
 
 ---
 
-## Phase 9: Documentation
+## Phase 9: Documentation (VitePress + i18n)
 
-### 9.1 User Documentation
-- [ ] Complete `README.md`
-  - [ ] Project introduction
-  - [ ] Key features
-  - [ ] Installation methods (npm, cargo, binary)
-  - [ ] Quick start
-  - [ ] Examples
-  - [ ] FAQ
-  - [ ] License
+### 9.1 VitePress 프로젝트 설정
+- [ ] `docs/` 디렉토리 생성
+- [ ] `docs/package.json` 생성 (VitePress 의존성)
+- [ ] `docs/.vitepress/config.ts` 생성 (i18n: 영어 + 한국어)
+- [ ] `docs/public/logo.jpg` - 프로젝트 로고 배치 (사이트 로고/파비콘/Hero)
 
-- [ ] `docs/` directory
-  - [ ] `getting-started.md`
-  - [ ] `configuration.md`
-  - [ ] `api-reference.md`
-  - [ ] `examples/`
-    - [ ] `simple-ci.md`
-    - [ ] `multi-job.md`
-    - [ ] `matrix-build.md`
-    - [ ] `custom-actions.md`
-  - [ ] `troubleshooting.md`
-  - [ ] `migration-guide.md` (v1 → v2)
+### 9.2 영어 문서 (docs/en/)
+- [ ] `en/index.md` - 랜딩 페이지 (Hero + Features + 코드 비교)
+- [ ] `en/guide/getting-started.md` - 퀵스타트 (init → add → build)
+- [ ] `en/guide/installation.md` - 설치법 (npm, cargo, binary)
+- [ ] `en/guide/writing-workflows.md` - 워크플로우 작성 (Workflow, Job, getAction, CompositeAction)
+- [ ] `en/guide/configuration.md` - `.gaji.toml` 설정
+- [ ] `en/guide/migration.md` - 기존 YAML 마이그레이션
+- [ ] `en/reference/cli.md` - CLI 명령어 레퍼런스
+- [ ] `en/reference/api.md` - TypeScript API (Workflow, Job, CompositeAction, CallAction)
+- [ ] `en/reference/actions.md` - getAction() 및 타입 생성
+- [ ] `en/examples/simple-ci.md` - 간단한 CI 예제
+- [ ] `en/examples/matrix-build.md` - 매트릭스 빌드
+- [ ] `en/examples/composite-action.md` - 컴포지트 액션
 
-### 9.2 Developer Documentation
-- [ ] `CONTRIBUTING.md`
-  - [ ] Development environment setup
-  - [ ] Code style guide
-  - [ ] PR process
-  - [ ] Test writing guide
+### 9.3 한국어 문서 (docs/ko/)
+- [ ] `ko/index.md` - 랜딩 페이지
+- [ ] `ko/guide/getting-started.md` - 빠른 시작
+- [ ] `ko/guide/installation.md` - 설치
+- [ ] `ko/guide/writing-workflows.md` - 워크플로우 작성
+- [ ] `ko/guide/configuration.md` - 설정
+- [ ] `ko/guide/migration.md` - 마이그레이션
+- [ ] `ko/reference/cli.md` - CLI 레퍼런스
+- [ ] `ko/reference/api.md` - API 레퍼런스
+- [ ] `ko/reference/actions.md` - 액션 레퍼런스
+- [ ] `ko/examples/simple-ci.md` - CI 예제
+- [ ] `ko/examples/matrix-build.md` - 매트릭스 빌드
+- [ ] `ko/examples/composite-action.md` - 컴포지트 액션
 
-- [ ] `ARCHITECTURE.md`
-  - [ ] System design
-  - [ ] Module structure
-  - [ ] Data flow
-  - [ ] Architecture Decision Records (ADR)
+### 9.4 프로젝트 연동
+- [ ] `.gitignore`에 VitePress 캐시/빌드/node_modules 추가
+- [ ] `README.md`에 문서 사이트 링크 추가
 
-- [ ] Code comments (rustdoc)
-  ```rust
-  /// Extracts action references from TypeScript source code.
-  ///
-  /// # Arguments
-  ///
-  /// * `source` - The TypeScript source code to parse
-  ///
-  /// # Returns
-  ///
-  /// A set of action references (e.g., "actions/checkout@v4")
-  ///
-  /// # Examples
-  ///
-  /// ```
-  /// let refs = extract_action_refs(r#"getAction("actions/checkout@v4")"#);
-  /// assert!(refs.contains("actions/checkout@v4"));
-  /// ```
-  pub fn extract_action_refs(source: &str) -> Result<HashSet<String>> {
-      // ...
-  }
-  ```
-
-### 9.3 Visual Materials
-- [ ] Demo GIF/video
-  - [ ] `gaji init` execution
-  - [ ] Auto-completion in action
-  - [ ] YAML generation
-
-- [ ] Architecture diagrams
-- [ ] YouTube tutorial (optional)
-- [ ] Blog posts
-
-### 9.4 Website (Optional)
-- [ ] GitHub Pages or Vercel
-- [ ] Interactive playground
-- [ ] Live examples
-- [ ] Search functionality
+**검증**: `cd docs && npm install && npm run docs:dev` → 로컬 서버에서 en/ko 전환 확인
 
 ---
 

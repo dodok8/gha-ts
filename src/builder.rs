@@ -406,3 +406,221 @@ pub async fn ensure_workflows_dir() -> Result<PathBuf> {
     fs::create_dir_all(&dir).await?;
     Ok(dir)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tempfile::TempDir;
+
+    // --- json_to_yaml tests ---
+
+    #[test]
+    fn test_json_to_yaml_simple() {
+        let json = r#"{"name": "CI", "on": {"push": {}}, "jobs": {}}"#;
+        let yaml = json_to_yaml(json).unwrap();
+        assert!(yaml.contains("name: CI"));
+        assert!(yaml.contains("on:"));
+        assert!(yaml.contains("jobs:"));
+    }
+
+    #[test]
+    fn test_json_to_yaml_nested() {
+        let json = r#"{"name": "CI", "on": {"push": {"branches": ["main"]}}, "jobs": {"build": {"runs-on": "ubuntu-latest", "steps": [{"name": "Test", "run": "echo hello"}]}}}"#;
+        let yaml = json_to_yaml(json).unwrap();
+        assert!(yaml.contains("branches:"));
+        assert!(yaml.contains("runs-on: ubuntu-latest"));
+    }
+
+    #[test]
+    fn test_json_to_yaml_invalid_json() {
+        let result = json_to_yaml("not valid json");
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Invalid JSON output"));
+    }
+
+    // --- validate_workflow_yaml tests ---
+
+    #[test]
+    fn test_validate_workflow_yaml_valid() {
+        let yaml = "name: CI\non:\n  push: {}\njobs:\n  build:\n    runs-on: ubuntu-latest\n";
+        assert!(validate_workflow_yaml(yaml).is_ok());
+    }
+
+    #[test]
+    fn test_validate_workflow_yaml_missing_on() {
+        let yaml = "name: CI\njobs:\n  build:\n    runs-on: ubuntu-latest\n";
+        let result = validate_workflow_yaml(yaml);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("'on'"));
+    }
+
+    #[test]
+    fn test_validate_workflow_yaml_missing_jobs() {
+        let yaml = "name: CI\non:\n  push: {}\n";
+        let result = validate_workflow_yaml(yaml);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("'jobs'"));
+    }
+
+    #[test]
+    fn test_validate_workflow_yaml_not_mapping() {
+        let yaml = "- item1\n- item2\n";
+        let result = validate_workflow_yaml(yaml);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("mapping"));
+    }
+
+    #[test]
+    fn test_validate_workflow_yaml_invalid_syntax() {
+        let yaml = ":\n  :\n    : [[[";
+        let result = validate_workflow_yaml(yaml);
+        assert!(result.is_err());
+    }
+
+    // --- timestamp_now tests ---
+
+    #[test]
+    fn test_timestamp_now_format() {
+        let ts = timestamp_now();
+        // Should match ISO 8601 format: YYYY-MM-DDTHH:MM:SSZ
+        assert!(
+            regex_lite(ts.as_str()),
+            "Timestamp '{}' does not match ISO 8601 format",
+            ts
+        );
+        assert!(ts.ends_with('Z'));
+        assert_eq!(ts.len(), 20);
+    }
+
+    /// Simple ISO 8601 format check without regex dependency
+    fn regex_lite(s: &str) -> bool {
+        let bytes = s.as_bytes();
+        if bytes.len() != 20 {
+            return false;
+        }
+        bytes[4] == b'-'
+            && bytes[7] == b'-'
+            && bytes[10] == b'T'
+            && bytes[13] == b':'
+            && bytes[16] == b':'
+            && bytes[19] == b'Z'
+            && bytes[0..4].iter().all(|b| b.is_ascii_digit())
+            && bytes[5..7].iter().all(|b| b.is_ascii_digit())
+            && bytes[8..10].iter().all(|b| b.is_ascii_digit())
+            && bytes[11..13].iter().all(|b| b.is_ascii_digit())
+            && bytes[14..16].iter().all(|b| b.is_ascii_digit())
+            && bytes[17..19].iter().all(|b| b.is_ascii_digit())
+    }
+
+    // --- should_write_file tests ---
+
+    #[tokio::test]
+    async fn test_should_write_file_new_file() {
+        let dir = TempDir::new().unwrap();
+        let path = dir.path().join("nonexistent.yml");
+        assert!(should_write_file(&path, "content").await.unwrap());
+    }
+
+    #[tokio::test]
+    async fn test_should_write_file_unchanged() {
+        let dir = TempDir::new().unwrap();
+        let path = dir.path().join("test.yml");
+        // Write a file with 4 header lines + content
+        let content = "# line1\n# line2\n# line3\n\nname: CI\non:\n  push: {}\n";
+        tokio::fs::write(&path, content).await.unwrap();
+
+        // The same content (without header) should return false
+        let result = should_write_file(&path, "name: CI\non:\n  push: {}")
+            .await
+            .unwrap();
+        assert!(!result);
+    }
+
+    #[tokio::test]
+    async fn test_should_write_file_changed() {
+        let dir = TempDir::new().unwrap();
+        let path = dir.path().join("test.yml");
+        let content = "# line1\n# line2\n# line3\n\nname: CI\non:\n  push: {}\n";
+        tokio::fs::write(&path, content).await.unwrap();
+
+        // Different content should return true
+        let result = should_write_file(&path, "name: Updated\non:\n  push: {}\njobs: {}")
+            .await
+            .unwrap();
+        assert!(result);
+    }
+
+    // --- find_workflow_files tests ---
+
+    #[tokio::test]
+    async fn test_find_workflow_files_filters_dts() {
+        let dir = TempDir::new().unwrap();
+
+        // Create various files
+        tokio::fs::write(dir.path().join("ci.ts"), "// workflow")
+            .await
+            .unwrap();
+        tokio::fs::write(dir.path().join("release.ts"), "// workflow")
+            .await
+            .unwrap();
+        tokio::fs::write(dir.path().join("types.d.ts"), "// declarations")
+            .await
+            .unwrap();
+        tokio::fs::write(dir.path().join("readme.md"), "# readme")
+            .await
+            .unwrap();
+        tokio::fs::write(dir.path().join("config.json"), "{}")
+            .await
+            .unwrap();
+
+        let builder =
+            WorkflowBuilder::new(dir.path().to_path_buf(), dir.path().join("output"), false);
+        let files = builder.find_workflow_files().await.unwrap();
+
+        assert_eq!(files.len(), 2);
+        let filenames: Vec<String> = files
+            .iter()
+            .map(|p| p.file_name().unwrap().to_string_lossy().to_string())
+            .collect();
+        assert!(filenames.contains(&"ci.ts".to_string()));
+        assert!(filenames.contains(&"release.ts".to_string()));
+        assert!(!filenames.iter().any(|f| f.contains(".d.ts")));
+    }
+
+    // --- build_all tests ---
+
+    #[tokio::test]
+    async fn test_build_all_empty_dir() {
+        let dir = TempDir::new().unwrap();
+        let builder =
+            WorkflowBuilder::new(dir.path().to_path_buf(), dir.path().join("output"), false);
+        let result = builder.build_all().await.unwrap();
+        assert!(result.is_empty());
+    }
+
+    // --- copy_node_shell_files tests ---
+
+    #[tokio::test]
+    async fn test_copy_node_shell_files_no_node_steps() {
+        let dir = TempDir::new().unwrap();
+        let workflow_path = dir.path().join("test.ts");
+        tokio::fs::write(&workflow_path, "").await.unwrap();
+
+        let json = r#"{"jobs":{"build":{"steps":[{"name":"Test","run":"echo hello"}]}}}"#;
+        let result = copy_node_shell_files(json, &workflow_path, dir.path()).await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_copy_node_shell_files_invalid_json() {
+        let dir = TempDir::new().unwrap();
+        let workflow_path = dir.path().join("test.ts");
+        tokio::fs::write(&workflow_path, "").await.unwrap();
+
+        let result = copy_node_shell_files("not json", &workflow_path, dir.path()).await;
+        assert!(result.is_ok()); // Should silently succeed on invalid JSON
+    }
+}
