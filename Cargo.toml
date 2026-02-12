@@ -1,6 +1,6 @@
 [package]
 name = "gaji"
-version = "0.2.3"
+version = "0.2.4"
 edition = "2021"
 description = "Type-safe GitHub Actions workflows in TypeScript"
 license = "MIT"

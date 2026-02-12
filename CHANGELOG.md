@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.4](https://github.com/dodok8/gaji/compare/v0.2.3...v0.2.4) - 2026-02-12
+
+### Fixed
+
+- ensure gaji binary has execute permission after npm install ([#18](https://github.com/dodok8/gaji/pull/18))
+
 ## [0.2.3](https://github.com/dodok8/gaji/compare/v0.2.2...v0.2.3) - 2026-02-13
 
 ### Fixed
