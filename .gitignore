@@ -13,9 +13,9 @@ Cargo.lock
 .DS_Store
 Thumbs.db
 
-# gha-ts generated files
+# gaji generated files
 generated/
-.gha-ts-cache.json
+.gaji-cache.json
 
 # Node.js (for npm wrapper)
 node_modules/

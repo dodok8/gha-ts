@@ -1,10 +1,10 @@
-# gha-ts
+# gaji
 
 Type-safe GitHub Actions workflows in TypeScript.
 
 ## Overview
 
-`gha-ts` is a CLI tool that allows developers to write GitHub Actions workflows in TypeScript with full type safety, then compile them to YAML.
+`gaji` is a CLI tool that allows developers to write GitHub Actions workflows in TypeScript with full type safety, then compile them to YAML.
 
 ## Features
 
@@ -18,26 +18,29 @@ Type-safe GitHub Actions workflows in TypeScript.
 ### From cargo
 
 ```bash
-cargo install gha-ts
+cargo install gaji
 ```
 
 ### From npm
 
 ```bash
-npm install -g gha-ts
+npm install -g gaji
 ```
 
 ## Quick Start
 
 ```bash
 # Initialize a new project
-gha-ts init
+gaji init
 
-# Start development mode (watch for changes)
-gha-ts dev
+# Run a one-time dev scan
+gaji dev
+
+# Run dev mode and keep watching for changes
+gaji dev --watch
 
 # Build workflows to YAML
-gha-ts build
+gaji build
 ```
 
 ## Usage
@@ -47,8 +50,8 @@ gha-ts build
 Create TypeScript files in the `workflows/` directory:
 
 ```typescript
-import { Workflow, Job } from 'gha-ts'
-import { getAction } from 'gha-ts/actions'
+import { Workflow, Job } from 'gaji'
+import { getAction } from 'gaji/actions'
 
 const checkout = getAction('actions/checkout@v4')
 const setupNode = getAction('actions/setup-node@v4')
@@ -74,12 +77,12 @@ export const ci = new Workflow('ci', {
 
 ### Commands
 
-- `gha-ts init` - Initialize a new project
-- `gha-ts dev` - Start development mode with file watching
-- `gha-ts build` - Build TypeScript workflows to YAML
-- `gha-ts watch` - Watch for file changes
-- `gha-ts add <action>` - Add a new action and generate types
-- `gha-ts clean` - Clean generated files
+- `gaji init` - Initialize a new project
+- `gaji dev` - One-time scan and type generation
+- `gaji dev --watch` - Keep watching for changes after the initial scan
+- `gaji build` - Build TypeScript workflows to YAML
+- `gaji add <action>` - Add a new action and generate types
+- `gaji clean` - Clean generated files
 
 ## License
 

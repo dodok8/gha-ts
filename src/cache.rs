@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::fetcher::ActionMetadata;
 
-const CACHE_FILE: &str = ".gha-ts-cache.json";
+const CACHE_FILE: &str = ".gaji-cache.json";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CacheEntry {

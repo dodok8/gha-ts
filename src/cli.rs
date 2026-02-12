@@ -1,8 +1,8 @@
 use clap::{Parser, Subcommand};
 
 #[derive(Parser)]
-#[command(name = "gha-ts")]
-#[command(author = "gha-ts contributors")]
+#[command(name = "gaji")]
+#[command(author = "gaji contributors")]
 #[command(version)]
 #[command(about = "Type-safe GitHub Actions workflows in TypeScript", long_about = None)]
 pub struct Cli {
@@ -12,7 +12,7 @@ pub struct Cli {
 
 #[derive(Subcommand)]
 pub enum Commands {
-    /// Initialize a new gha-ts project
+    /// Initialize a new gaji project
     Init {
         /// Overwrite existing files
         #[arg(long)]
@@ -31,11 +31,15 @@ pub enum Commands {
         interactive: bool,
     },
 
-    /// Start development mode with file watching
+    /// Start development mode (one-time scan by default)
     Dev {
         /// Directory to watch
         #[arg(short, long, default_value = "workflows")]
         dir: String,
+
+        /// Keep watching for changes after the initial scan
+        #[arg(long)]
+        watch: bool,
     },
 
     /// Build TypeScript workflows to YAML
@@ -47,13 +51,6 @@ pub enum Commands {
         /// Output directory for YAML files
         #[arg(short, long, default_value = ".github/workflows")]
         output: String,
-    },
-
-    /// Watch for file changes and regenerate types
-    Watch {
-        /// Directory to watch
-        #[arg(short, long, default_value = "workflows")]
-        dir: String,
     },
 
     /// Add a new action and generate types

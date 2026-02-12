@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 
-const CONFIG_FILE: &str = ".gha-ts.toml";
+const CONFIG_FILE: &str = ".gaji.toml";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[derive(Default)]
