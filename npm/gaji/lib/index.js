@@ -1,5 +1,5 @@
 // gaji runtime library
-// https://github.com/gaji-ts/gaji
+// https://github.com/dodok8/gaji
 
 export function getAction(ref) {
     return function(config) {

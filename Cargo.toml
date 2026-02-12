@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2021"
 description = "Type-safe GitHub Actions workflows in TypeScript"
 license = "MIT"
-repository = "https://github.com/gaji-ts/gaji"
+repository = "https://github.com/dodok8/gaji"
 keywords = ["github-actions", "typescript", "ci-cd", "workflow"]
 categories = ["development-tools", "command-line-utilities"]
 

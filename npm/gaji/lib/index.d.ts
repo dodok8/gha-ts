@@ -1,5 +1,5 @@
 // gaji runtime type declarations
-// https://github.com/gaji-ts/gaji
+// https://github.com/dodok8/gaji
 
 import type {
     JobStep,

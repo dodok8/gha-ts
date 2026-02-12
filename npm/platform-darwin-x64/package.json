@@ -5,7 +5,7 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/gaji-ts/gaji"
+    "url": "https://github.com/dodok8/gaji"
   },
   "os": ["darwin"],
   "cpu": ["x64"],
