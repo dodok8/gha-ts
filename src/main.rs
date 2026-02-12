@@ -7,8 +7,8 @@ use colored::Colorize;
 use gaji::builder::WorkflowBuilder;
 use gaji::cache::Cache;
 use gaji::cli::{Cli, Commands};
-use gaji::config::Config;
 use gaji::generator::TypeGenerator;
+use gaji::init::{self, InitOptions};
 use gaji::parser;
 use gaji::watcher;
 
@@ -47,32 +47,19 @@ async fn main() -> Result<()> {
 }
 
 async fn cmd_init(
-    _force: bool,
-    _skip_examples: bool,
-    _migrate: bool,
-    _interactive: bool,
+    force: bool,
+    skip_examples: bool,
+    migrate: bool,
+    interactive: bool,
 ) -> Result<()> {
-    println!("{} Initializing gaji project...\n", "🚀".green());
-
-    // Create directories
-    tokio::fs::create_dir_all("workflows").await?;
-    tokio::fs::create_dir_all("generated").await?;
-    tokio::fs::create_dir_all(".github/workflows").await?;
-
-    println!("{} Created project directories", "✓".green());
-
-    // Create config file
-    let config = Config::default();
-    config.save()?;
-    println!("{} Created .gaji.toml", "✓".green());
-
-    println!("\n{} Project initialized!\n", "✨".green());
-    println!("Next steps:");
-    println!("  1. Create workflow files in workflows/");
-    println!("  2. Run: gaji dev");
-    println!("  3. Run: gaji build");
-
-    Ok(())
+    let root = std::env::current_dir()?;
+    let options = InitOptions {
+        force,
+        skip_examples,
+        migrate,
+        interactive,
+    };
+    init::init_project(&root, options).await
 }
 
 async fn cmd_dev(dir: &str, watch: bool) -> Result<()> {

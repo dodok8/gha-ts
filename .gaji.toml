@@ -1,0 +1,18 @@
+[project]
+workflows_dir = "workflows"
+output_dir = ".github/workflows"
+generated_dir = "generated"
+
+[watch]
+debounce_ms = 300
+ignored_patterns = [
+    "node_modules",
+    ".git",
+    "generated",
+]
+
+[build]
+validate = true
+format = true
+
+[github]

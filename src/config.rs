@@ -147,21 +147,6 @@ impl Config {
     }
 }
 
-// Add toml crate usage (we'll need to add it to Cargo.toml)
-mod toml {
-    use serde::{de::DeserializeOwned, Serialize};
-
-    pub fn from_str<T: DeserializeOwned>(s: &str) -> Result<T, std::io::Error> {
-        // Simple stub - in production use toml crate
-        serde_json::from_str(s).map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))
-    }
-
-    pub fn to_string_pretty<T: Serialize>(value: &T) -> Result<String, std::io::Error> {
-        // Simple stub - in production use toml crate
-        serde_json::to_string_pretty(value)
-            .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))
-    }
-}
 
 #[cfg(test)]
 mod tests {

@@ -7,5 +7,6 @@ pub mod builder;
 pub mod cache;
 pub mod config;
 pub mod executor;
+pub mod init;
 
 pub use cli::Cli;
