@@ -245,12 +245,17 @@ mod tests {
             outputs: None,
             runs: None,
         };
-        cache.set("test/action@v1", &metadata, "yaml content").unwrap();
+        cache
+            .set("test/action@v1", &metadata, "yaml content")
+            .unwrap();
 
         // Read back the file and verify
         let content = std::fs::read_to_string(&cache_file).unwrap();
         let loaded: CacheData = serde_json::from_str(&content).unwrap();
         assert!(loaded.entries.contains_key("test/action@v1"));
-        assert_eq!(loaded.entries["test/action@v1"].metadata.name, "Test Action");
+        assert_eq!(
+            loaded.entries["test/action@v1"].metadata.name,
+            "Test Action"
+        );
     }
 }

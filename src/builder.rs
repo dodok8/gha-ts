@@ -533,7 +533,9 @@ mod tests {
         tokio::fs::write(&path, content).await.unwrap();
 
         // The same content (without header) should return false
-        let result = should_write_file(&path, "name: CI\non:\n  push: {}").await.unwrap();
+        let result = should_write_file(&path, "name: CI\non:\n  push: {}")
+            .await
+            .unwrap();
         assert!(!result);
     }
 
@@ -545,7 +547,9 @@ mod tests {
         tokio::fs::write(&path, content).await.unwrap();
 
         // Different content should return true
-        let result = should_write_file(&path, "name: Updated\non:\n  push: {}\njobs: {}").await.unwrap();
+        let result = should_write_file(&path, "name: Updated\non:\n  push: {}\njobs: {}")
+            .await
+            .unwrap();
         assert!(result);
     }
 
@@ -556,17 +560,24 @@ mod tests {
         let dir = TempDir::new().unwrap();
 
         // Create various files
-        tokio::fs::write(dir.path().join("ci.ts"), "// workflow").await.unwrap();
-        tokio::fs::write(dir.path().join("release.ts"), "// workflow").await.unwrap();
-        tokio::fs::write(dir.path().join("types.d.ts"), "// declarations").await.unwrap();
-        tokio::fs::write(dir.path().join("readme.md"), "# readme").await.unwrap();
-        tokio::fs::write(dir.path().join("config.json"), "{}").await.unwrap();
+        tokio::fs::write(dir.path().join("ci.ts"), "// workflow")
+            .await
+            .unwrap();
+        tokio::fs::write(dir.path().join("release.ts"), "// workflow")
+            .await
+            .unwrap();
+        tokio::fs::write(dir.path().join("types.d.ts"), "// declarations")
+            .await
+            .unwrap();
+        tokio::fs::write(dir.path().join("readme.md"), "# readme")
+            .await
+            .unwrap();
+        tokio::fs::write(dir.path().join("config.json"), "{}")
+            .await
+            .unwrap();
 
-        let builder = WorkflowBuilder::new(
-            dir.path().to_path_buf(),
-            dir.path().join("output"),
-            false,
-        );
+        let builder =
+            WorkflowBuilder::new(dir.path().to_path_buf(), dir.path().join("output"), false);
         let files = builder.find_workflow_files().await.unwrap();
 
         assert_eq!(files.len(), 2);
@@ -584,11 +595,8 @@ mod tests {
     #[tokio::test]
     async fn test_build_all_empty_dir() {
         let dir = TempDir::new().unwrap();
-        let builder = WorkflowBuilder::new(
-            dir.path().to_path_buf(),
-            dir.path().join("output"),
-            false,
-        );
+        let builder =
+            WorkflowBuilder::new(dir.path().to_path_buf(), dir.path().join("output"), false);
         let result = builder.build_all().await.unwrap();
         assert!(result.is_empty());
     }
