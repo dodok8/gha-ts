@@ -1,15 +1,14 @@
-// release-plz: automated versioning, changelog, and crates.io publishing
+// release-plz: automated versioning, changelog, git tag, and GitHub Release
 import { getAction, Job, Workflow } from "../generated/index.js";
 
 const checkout = getAction("actions/checkout@v5");
 const rustToolchain = getAction("dtolnay/rust-toolchain@stable");
 const releasePlz = getAction("release-plz/action@v0.5");
 
-// Job 1: Release (publish to crates.io + create git tag + GitHub Release)
+// Job 1: Release (create git tag + GitHub Release, no crates.io publish)
 const release = new Job("ubuntu-latest", {
   permissions: {
     contents: "write",
-    "id-token": "write",
   },
 })
   .addStep(

@@ -211,6 +211,25 @@ const publishNpm = new Job("ubuntu-latest", {
     ].join("\n"),
   });
 
+// --- Job 4: Publish to crates.io (Trusted Publishing via OIDC) ---
+const publishCrates = new Job("ubuntu-latest", {
+  permissions: {
+    "id-token": "write",
+    contents: "read",
+  },
+})
+  .addStep(checkout({}))
+  .addStep(rustToolchain({}))
+  .addStep({
+    name: "Get OIDC token and publish",
+    run: [
+      '# Exchange OIDC token for crates.io API token',
+      'OIDC_TOKEN=$(curl -sLS "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=crates.io" -H "Authorization: bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" | jq -r ".value")',
+      'CRATES_TOKEN=$(curl -sLS "https://crates.io/api/v1/trusted_publishing/tokens" -X POST -H "Content-Type: application/json" -d "{\"oidc_token\": \"${OIDC_TOKEN}\"}" | jq -r ".token")',
+      'CARGO_REGISTRY_TOKEN="$CRATES_TOKEN" cargo publish',
+    ].join("\n"),
+  });
+
 // --- Assemble workflow ---
 const workflow = new Workflow({
   name: "Release",
@@ -225,6 +244,7 @@ const workflow = new Workflow({
 })
   .addJob("build", build)
   .addJob("upload-release-assets", uploadReleaseAssets)
-  .addJob("publish-npm", publishNpm);
+  .addJob("publish-npm", publishNpm)
+  .addJob("publish-crates", publishCrates);
 
 workflow.build("release");
