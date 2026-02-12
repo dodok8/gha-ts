@@ -163,7 +163,6 @@ const publishNpm = new Job("ubuntu-latest", {
     setupNode({
       with: {
         "node-version": "22",
-        "registry-url": "https://registry.npmjs.org",
       },
     })
   )
