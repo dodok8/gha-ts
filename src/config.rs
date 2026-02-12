@@ -4,6 +4,7 @@ use anyhow::Result;
 use serde::{Deserialize, Serialize};
 
 const CONFIG_FILE: &str = ".gaji.toml";
+const LOCAL_CONFIG_FILE: &str = ".gaji.local.toml";
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct Config {
@@ -53,6 +54,7 @@ pub struct BuildConfig {
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct GitHubConfig {
     pub token: Option<String>,
+    pub api_url: Option<String>,
 }
 
 impl Default for ProjectConfig {
@@ -109,7 +111,7 @@ fn default_true() -> bool {
 
 impl Config {
     pub fn load() -> Result<Self> {
-        Self::load_from(Path::new(CONFIG_FILE))
+        Self::load_with_local(Path::new(CONFIG_FILE), Path::new(LOCAL_CONFIG_FILE))
     }
 
     pub fn load_from(path: &Path) -> Result<Self> {
@@ -120,6 +122,42 @@ impl Config {
         } else {
             Ok(Config::default())
         }
+    }
+
+    pub fn load_with_local(config_path: &Path, local_path: &Path) -> Result<Self> {
+        let mut config = Self::load_from(config_path)?;
+
+        if local_path.exists() {
+            let local_content = std::fs::read_to_string(local_path)?;
+            let local: Config = toml::from_str(&local_content)?;
+            config.merge_local(local);
+        }
+
+        Ok(config)
+    }
+
+    fn merge_local(&mut self, local: Config) {
+        if local.github.token.is_some() {
+            self.github.token = local.github.token;
+        }
+        if local.github.api_url.is_some() {
+            self.github.api_url = local.github.api_url;
+        }
+    }
+
+    /// Resolve the GitHub token with priority: env var > local config > public config
+    pub fn resolve_token(&self) -> Option<String> {
+        std::env::var("GITHUB_TOKEN")
+            .ok()
+            .filter(|s| !s.is_empty())
+            .or_else(|| self.github.token.clone())
+    }
+
+    /// Resolve the GitHub API base URL for raw content.
+    /// Returns None for default github.com (uses raw.githubusercontent.com).
+    /// Returns Some(url) for GitHub Enterprise.
+    pub fn resolve_api_url(&self) -> Option<String> {
+        self.github.api_url.clone()
     }
 
     pub fn save(&self) -> Result<()> {
@@ -202,5 +240,121 @@ workflows_dir = "my_workflows"
         assert_eq!(config.watch.debounce_ms, 300);
         assert!(config.build.validate);
         assert!(config.github.token.is_none());
+    }
+
+    #[test]
+    fn test_parse_github_config_with_api_url() {
+        let toml_str = r#"
+[github]
+token = "ghp_enterprise123"
+api_url = "https://github.example.com"
+"#;
+        let config: Config = toml::from_str(toml_str).unwrap();
+        assert_eq!(config.github.token, Some("ghp_enterprise123".to_string()));
+        assert_eq!(
+            config.github.api_url,
+            Some("https://github.example.com".to_string())
+        );
+    }
+
+    #[test]
+    fn test_merge_local_overrides_token() {
+        let mut config = Config::default();
+        config.github.token = Some("public_token".to_string());
+
+        let mut local = Config::default();
+        local.github.token = Some("local_secret_token".to_string());
+
+        config.merge_local(local);
+        assert_eq!(config.github.token, Some("local_secret_token".to_string()));
+    }
+
+    #[test]
+    fn test_merge_local_does_not_clear_existing() {
+        let mut config = Config::default();
+        config.github.token = Some("existing_token".to_string());
+
+        let local = Config::default(); // no token set
+        config.merge_local(local);
+
+        assert_eq!(config.github.token, Some("existing_token".to_string()));
+    }
+
+    #[test]
+    fn test_merge_local_overrides_api_url() {
+        let mut config = Config::default();
+
+        let mut local = Config::default();
+        local.github.api_url = Some("https://ghe.corp.com".to_string());
+
+        config.merge_local(local);
+        assert_eq!(
+            config.github.api_url,
+            Some("https://ghe.corp.com".to_string())
+        );
+    }
+
+    #[test]
+    fn test_load_with_local_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let config_path = dir.path().join(".gaji.toml");
+        let local_path = dir.path().join(".gaji.local.toml");
+
+        std::fs::write(
+            &config_path,
+            r#"
+[project]
+workflows_dir = "workflows"
+"#,
+        )
+        .unwrap();
+
+        std::fs::write(
+            &local_path,
+            r#"
+[github]
+token = "secret_from_local"
+api_url = "https://ghe.internal.com"
+"#,
+        )
+        .unwrap();
+
+        let config = Config::load_with_local(&config_path, &local_path).unwrap();
+        assert_eq!(config.project.workflows_dir, "workflows");
+        assert_eq!(config.github.token, Some("secret_from_local".to_string()));
+        assert_eq!(
+            config.github.api_url,
+            Some("https://ghe.internal.com".to_string())
+        );
+    }
+
+    #[test]
+    fn test_resolve_token_prefers_env_var() {
+        let mut config = Config::default();
+        config.github.token = Some("config_token".to_string());
+
+        // When GITHUB_TOKEN env is set, it takes priority
+        std::env::set_var("GITHUB_TOKEN", "env_token");
+        assert_eq!(config.resolve_token(), Some("env_token".to_string()));
+        std::env::remove_var("GITHUB_TOKEN");
+    }
+
+    #[test]
+    fn test_resolve_token_falls_back_to_config() {
+        // Ensure env var is not set
+        std::env::remove_var("GITHUB_TOKEN");
+
+        let mut config = Config::default();
+        config.github.token = Some("config_token".to_string());
+
+        assert_eq!(config.resolve_token(), Some("config_token".to_string()));
+    }
+
+    #[test]
+    fn test_resolve_token_returns_none_when_empty() {
+        std::env::remove_var("GITHUB_TOKEN");
+
+        let config = Config::default();
+        assert_eq!(config.resolve_token(), None);
     }
 }

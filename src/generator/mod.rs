@@ -19,9 +19,14 @@ pub struct TypeGenerator {
 }
 
 impl TypeGenerator {
-    pub fn new(cache: Cache, output_dir: PathBuf) -> Self {
+    pub fn new(
+        cache: Cache,
+        output_dir: PathBuf,
+        token: Option<String>,
+        api_url: Option<String>,
+    ) -> Self {
         Self {
-            fetcher: GitHubFetcher::new(cache),
+            fetcher: GitHubFetcher::new(cache, token, api_url),
             output_dir,
         }
     }

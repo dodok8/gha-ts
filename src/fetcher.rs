@@ -89,46 +89,93 @@ impl ActionRef {
     }
 
     pub fn to_raw_url(&self) -> String {
-        let base_path = if let Some(path) = &self.path {
-            format!("{}/{}/{}", self.owner, self.repo, path)
-        } else {
-            format!("{}/{}", self.owner, self.repo)
-        };
-
-        format!(
-            "https://raw.githubusercontent.com/{}/{}/action.yml",
-            base_path, self.ref_
-        )
+        self.to_raw_url_with_base(None)
     }
 
     pub fn to_raw_url_yaml(&self) -> String {
+        self.to_raw_url_yaml_with_base(None)
+    }
+
+    pub fn to_raw_url_with_base(&self, api_url: Option<&str>) -> String {
         let base_path = if let Some(path) = &self.path {
             format!("{}/{}/{}", self.owner, self.repo, path)
         } else {
             format!("{}/{}", self.owner, self.repo)
         };
 
-        format!(
-            "https://raw.githubusercontent.com/{}/{}/action.yaml",
-            base_path, self.ref_
-        )
+        match api_url {
+            Some(base) => {
+                let base = base.trim_end_matches('/');
+                format!(
+                    "{}/api/v3/repos/{}/{}/contents/{}action.yml?ref={}",
+                    base,
+                    self.owner,
+                    self.repo,
+                    self.path
+                        .as_ref()
+                        .map(|p| format!("{}/", p))
+                        .unwrap_or_default(),
+                    self.ref_
+                )
+            }
+            None => format!(
+                "https://raw.githubusercontent.com/{}/{}/action.yml",
+                base_path, self.ref_
+            ),
+        }
+    }
+
+    pub fn to_raw_url_yaml_with_base(&self, api_url: Option<&str>) -> String {
+        let base_path = if let Some(path) = &self.path {
+            format!("{}/{}/{}", self.owner, self.repo, path)
+        } else {
+            format!("{}/{}", self.owner, self.repo)
+        };
+
+        match api_url {
+            Some(base) => {
+                let base = base.trim_end_matches('/');
+                format!(
+                    "{}/api/v3/repos/{}/{}/contents/{}action.yaml?ref={}",
+                    base,
+                    self.owner,
+                    self.repo,
+                    self.path
+                        .as_ref()
+                        .map(|p| format!("{}/", p))
+                        .unwrap_or_default(),
+                    self.ref_
+                )
+            }
+            None => format!(
+                "https://raw.githubusercontent.com/{}/{}/action.yaml",
+                base_path, self.ref_
+            ),
+        }
     }
 }
 
 pub struct GitHubFetcher {
     client: reqwest::Client,
     cache: Cache,
+    token: Option<String>,
+    api_url: Option<String>,
 }
 
 impl GitHubFetcher {
-    pub fn new(cache: Cache) -> Self {
+    pub fn new(cache: Cache, token: Option<String>, api_url: Option<String>) -> Self {
         let client = reqwest::Client::builder()
             .timeout(Duration::from_secs(30))
             .user_agent("gaji")
             .build()
             .expect("Failed to create HTTP client");
 
-        Self { client, cache }
+        Self {
+            client,
+            cache,
+            token,
+            api_url,
+        }
     }
 
     pub async fn fetch_action_metadata(&self, action_ref_str: &str) -> Result<ActionMetadata> {
@@ -149,24 +196,37 @@ impl GitHubFetcher {
     }
 
     async fn fetch_action_yaml(&self, action_ref: &ActionRef) -> Result<String> {
+        let api_url = self.api_url.as_deref();
+
         // Try action.yml first
-        let url = action_ref.to_raw_url();
-        match self.fetch_with_retry(&url).await {
+        let url = action_ref.to_raw_url_with_base(api_url);
+        match self.fetch_with_retry(&url, api_url.is_some()).await {
             Ok(content) => Ok(content),
             Err(_) => {
                 // Try action.yaml as fallback
-                let url_yaml = action_ref.to_raw_url_yaml();
-                self.fetch_with_retry(&url_yaml).await
+                let url_yaml = action_ref.to_raw_url_yaml_with_base(api_url);
+                self.fetch_with_retry(&url_yaml, api_url.is_some()).await
             }
         }
     }
 
-    async fn fetch_with_retry(&self, url: &str) -> Result<String> {
+    async fn fetch_with_retry(&self, url: &str, is_api: bool) -> Result<String> {
         let mut retries = 0;
         const MAX_RETRIES: u32 = 3;
 
         loop {
-            match self.client.get(url).send().await {
+            let mut request = self.client.get(url);
+
+            if let Some(token) = &self.token {
+                request = request.header("Authorization", format!("token {}", token));
+            }
+
+            // For GitHub Enterprise API, request raw content
+            if is_api {
+                request = request.header("Accept", "application/vnd.github.raw+json");
+            }
+
+            match request.send().await {
                 Ok(response) => {
                     if response.status().is_success() {
                         return response

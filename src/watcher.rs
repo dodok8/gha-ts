@@ -7,6 +7,7 @@ use colored::Colorize;
 use notify::{Config, Event, EventKind, RecommendedWatcher, RecursiveMode, Watcher};
 
 use crate::cache::Cache;
+use crate::config::Config as GajiConfig;
 use crate::generator::TypeGenerator;
 use crate::parser;
 
@@ -100,8 +101,12 @@ async fn handle_event(event: &Event) -> Result<()> {
         );
 
         // Generate types
+        let gaji_config = GajiConfig::load()?;
+        let token = gaji_config.resolve_token();
+        let api_url = gaji_config.resolve_api_url();
         let cache = Cache::load_or_create()?;
-        let generator = TypeGenerator::new(cache, std::path::PathBuf::from("generated"));
+        let generator =
+            TypeGenerator::new(cache, std::path::PathBuf::from("generated"), token, api_url);
 
         let new_refs: std::collections::HashSet<String> = action_refs
             .into_iter()

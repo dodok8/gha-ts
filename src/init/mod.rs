@@ -345,8 +345,11 @@ async fn generate_initial_types(root: &Path) -> Result<()> {
         all_refs.len()
     );
 
+    let config = Config::load()?;
+    let token = config.resolve_token();
+    let api_url = config.resolve_api_url();
     let cache = Cache::load_or_create()?;
-    let generator = TypeGenerator::new(cache, root.join("generated"));
+    let generator = TypeGenerator::new(cache, root.join("generated"), token, api_url);
     generator.generate_types_for_refs(&all_refs).await?;
 
     println!("{} Types generated!", "✨".green());
@@ -359,6 +362,14 @@ fn print_next_steps() {
     println!("  1. Edit workflows/*.ts");
     println!("  2. Run: gaji dev");
     println!("  3. Run: gaji build");
+    println!();
+    println!(
+        "{} For private repos or GitHub Enterprise, create .gaji.local.toml:",
+        "💡".yellow()
+    );
+    println!("   [github]");
+    println!("   token = \"ghp_your_token_here\"");
+    println!("   # api_url = \"https://github.example.com\"  # for GitHub Enterprise");
     println!();
     println!("Learn more: https://github.com/dodok8/gaji");
 }
