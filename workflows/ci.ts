@@ -30,7 +30,11 @@ const clippy = new Job("ubuntu-latest")
   });
 
 const test = new Job("ubuntu-latest")
-  .addStep(checkout({}))
+  .addStep(checkout({
+    with: {
+      "fetch-depth": 1,
+    },
+  }))
   .addStep(rustToolchain({}))
   .addStep(rustCache({}))
   .addStep({
