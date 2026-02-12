@@ -8,7 +8,7 @@ const rustCache = getAction("Swatinem/rust-cache@v2");
 const buildWorkflows = new Job("ubuntu-latest")
   .addStep(checkout({
     with: {
-      token: "${{ secrets.GITHUB_TOKEN }}",
+      token: "${{ secrets.PAT }}",
       "fetch-depth": 1,
     },
   }))
@@ -27,25 +27,12 @@ const buildWorkflows = new Job("ubuntu-latest")
     run: "./target/release/gaji build",
   })
   .addStep({
-    name: "Check for changes",
-    id: "changes",
-    run: [
-      "if git diff --quiet .github/workflows/; then",
-      '  echo "changed=false" >> $GITHUB_OUTPUT',
-      "else",
-      '  echo "changed=true" >> $GITHUB_OUTPUT',
-      "fi",
-    ].join("\n"),
-  })
-  .addStep({
     name: "Commit and push",
-    "if": "steps.changes.outputs.changed == 'true'",
     run: [
       'git config user.name "github-actions[bot]"',
       'git config user.email "github-actions[bot]@users.noreply.github.com"',
       "git add .github/workflows/",
-      'git commit -m "chore: update generated workflows"',
-      "git push",
+      'git diff --cached --quiet || (git commit -m "chore: update generated workflows" && git push)',
     ].join("\n"),
   });
 
@@ -56,6 +43,9 @@ const workflow = new Workflow({
       branches: ["main"],
       paths: ["workflows/**"],
     },
+  },
+  permissions: {
+    contents: "write",
   },
 }).addJob("build-workflows", buildWorkflows);
 
