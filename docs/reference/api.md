@@ -11,10 +11,19 @@ Represents a GitHub Actions workflow.
 ```typescript
 class Workflow {
   constructor(config: WorkflowConfig)
-  addJob(id: string, job: Job): this
-  build(filename: string): void
+  addJob(id: string, job: Job | CompositeJob | CallJob): this
+  static fromObject(def: WorkflowDefinition, id?: string): Workflow
+  build(filename?: string): void
+  toJSON(): WorkflowDefinition
 }
 ```
+
+| Method | Description |
+|--------|-------------|
+| `addJob(id, job)` | Add a job to the workflow. Accepts `Job`, `CompositeJob`, or `CallJob`. |
+| `fromObject(def, id?)` | Create a Workflow from a raw `WorkflowDefinition` object. Useful for wrapping existing YAML-like definitions. |
+| `build(filename?)` | Compile and output the workflow as YAML. |
+| `toJSON()` | Serialize to a `WorkflowDefinition` object. |
 
 #### `WorkflowConfig`
 
@@ -47,6 +56,23 @@ const workflow = new Workflow({
 workflow.build("ci");
 ```
 
+#### `Workflow.fromObject()` Example
+
+```typescript
+const workflow = Workflow.fromObject({
+  name: "Raw Workflow",
+  on: { push: {} },
+  jobs: {
+    test: {
+      "runs-on": "ubuntu-latest",
+      steps: [{ run: "echo hello" }],
+    },
+  },
+});
+
+workflow.build("raw");
+```
+
 ---
 
 ### `Job`
@@ -55,13 +81,41 @@ Represents a job in a workflow.
 
 ```typescript
 class Job {
-  constructor(runsOn: string | string[])
+  constructor(runsOn: string | string[], options?: Partial<JobDefinition>)
   addStep(step: Step): this
-  needs(jobs: string[]): this
-  strategy(strategy: JobStrategy): this
+  needs(jobs: string | string[]): this
   env(variables: Record<string, string>): this
+  when(condition: string): this
+  permissions(perms: Permissions): this
   outputs(outputs: Record<string, string>): this
+  strategy(strategy: JobStrategy): this
+  continueOnError(v: boolean): this
+  timeoutMinutes(m: number): this
+  toJSON(): JobDefinition
 }
+```
+
+| Method | Description |
+|--------|-------------|
+| `addStep(step)` | Append a step to the job. |
+| `needs(jobs)` | Set job dependencies. |
+| `env(variables)` | Set environment variables. |
+| `when(condition)` | Set the job's `if` condition (e.g., `"github.ref == 'refs/heads/main'"`). |
+| `permissions(perms)` | Set job-level permissions (e.g., `{ contents: 'read' }`). |
+| `outputs(outputs)` | Define job outputs. |
+| `strategy(strategy)` | Set matrix strategy. |
+| `continueOnError(v)` | Set the `continue-on-error` flag. |
+| `timeoutMinutes(m)` | Set the `timeout-minutes` value. |
+| `toJSON()` | Serialize to a `JobDefinition` object. |
+
+The optional `options` parameter in the constructor allows setting all job options at once:
+
+```typescript
+const job = new Job("ubuntu-latest", {
+  needs: ["test"],
+  env: { NODE_ENV: "production" },
+  "timeout-minutes": 30,
+});
 ```
 
 #### Example
@@ -72,6 +126,8 @@ const job = new Job("ubuntu-latest")
   .env({
     NODE_ENV: "production",
   })
+  .when("github.event_name == 'push'")
+  .permissions({ contents: "read" })
   .strategy({
     matrix: {
       node: ["18", "20", "22"],
@@ -80,6 +136,8 @@ const job = new Job("ubuntu-latest")
   .outputs({
     version: "${{ steps.version.outputs.value }}",
   })
+  .continueOnError(false)
+  .timeoutMinutes(30)
   .addStep(checkout({}))
   .addStep({ run: "npm test" });
 ```
@@ -236,17 +294,19 @@ const step = {
 
 ### `CompositeJob`
 
-Create reusable job templates.
+Create reusable job templates via TypeScript class inheritance. `CompositeJob` extends `Job`, so all `Job` methods are available.
 
 ```typescript
-class CompositeJob {
-  constructor(runsOn: string | string[])
-  addStep(step: Step): this
-  needs(jobs: string[]): this
-  strategy(strategy: JobStrategy): this
-  env(variables: Record<string, string>): this
+class CompositeJob extends Job {
+  constructor(runsOn: string | string[], options?: Partial<JobDefinition>)
 }
 ```
+
+Unlike `Job`, `CompositeJob` is designed to be subclassed with `extends` to create domain-specific, parameterized job templates. It produces the same YAML output as a regular `Job`.
+
+::: tip CompositeJob vs Job
+Use `Job` directly for one-off jobs. Use `CompositeJob` when you want to create a **reusable class** that encapsulates a common job pattern with parameters.
+:::
 
 #### Example
 
@@ -313,6 +373,100 @@ const workflow = new Workflow({
 })
   .addJob("deploy-staging", new DeployJob("staging"))
   .addJob("deploy-production", new DeployJob("production").needs(["deploy-staging"]));
+```
+
+---
+
+### `CallJob`
+
+Call a [reusable workflow](https://docs.github.com/en/actions/using-workflows/reusing-workflows) defined in another repository or file. Unlike `Job`, a `CallJob` has no `steps` — it delegates entirely to the referenced workflow via `uses`.
+
+```typescript
+class CallJob {
+  constructor(uses: string)
+  with(inputs: Record<string, unknown>): this
+  secrets(s: Record<string, unknown> | 'inherit'): this
+  needs(deps: string | string[]): this
+  when(condition: string): this
+  permissions(perms: Permissions): this
+  toJSON(): object
+}
+```
+
+| Method | Description |
+|--------|-------------|
+| `with(inputs)` | Pass inputs to the reusable workflow. |
+| `secrets(s)` | Pass secrets explicitly, or use `'inherit'` to forward all secrets. |
+| `needs(deps)` | Set job dependencies. |
+| `when(condition)` | Set the job's `if` condition. |
+| `permissions(perms)` | Set job-level permissions. |
+
+#### Example
+
+```typescript
+import { CallJob, Workflow } from "../generated/index.js";
+
+const deploy = new CallJob("octo-org/deploy/.github/workflows/deploy.yml@main")
+  .with({ environment: "production" })
+  .secrets("inherit")
+  .needs(["build"]);
+
+const workflow = new Workflow({
+  name: "Release",
+  on: { push: { tags: ["v*"] } },
+})
+  .addJob("deploy", deploy);
+
+workflow.build("release");
+```
+
+Generated YAML:
+
+```yaml
+jobs:
+  deploy:
+    uses: octo-org/deploy/.github/workflows/deploy.yml@main
+    with:
+      environment: production
+    secrets: inherit
+    needs:
+      - build
+```
+
+---
+
+### `CallAction`
+
+Reference a local composite or JavaScript action built by gaji, for use as a step in a job.
+
+```typescript
+class CallAction {
+  constructor(uses: string)
+  static from(action: CompositeAction | JavaScriptAction): CallAction
+  toJSON(): Step
+}
+```
+
+| Method | Description |
+|--------|-------------|
+| `from(action)` | Create a `CallAction` from a `CompositeAction` or `JavaScriptAction` instance. Automatically resolves the `.github/actions/<id>` path. |
+
+#### Example
+
+```typescript
+import { CompositeAction, CallAction, Job } from "../generated/index.js";
+
+const setupEnv = new CompositeAction({
+  name: "Setup",
+  description: "Setup environment",
+});
+setupEnv.build("setup-env");
+
+const job = new Job("ubuntu-latest")
+  .addStep({
+    ...CallAction.from(setupEnv).toJSON(),
+    with: { "node-version": "20" },
+  });
 ```
 
 ---

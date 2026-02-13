@@ -11,10 +11,19 @@ GitHub Actions 워크플로우를 나타냅니다.
 ```typescript
 class Workflow {
   constructor(config: WorkflowConfig)
-  addJob(id: string, job: Job): this
-  build(filename: string): void
+  addJob(id: string, job: Job | CompositeJob | CallJob): this
+  static fromObject(def: WorkflowDefinition, id?: string): Workflow
+  build(filename?: string): void
+  toJSON(): WorkflowDefinition
 }
 ```
+
+| 메서드 | 설명 |
+|--------|------|
+| `addJob(id, job)` | 워크플로우에 job을 추가합니다. `Job`, `CompositeJob`, `CallJob`을 받습니다. |
+| `fromObject(def, id?)` | `WorkflowDefinition` 객체로부터 Workflow를 생성합니다. 기존 YAML 형태의 정의를 래핑할 때 유용합니다. |
+| `build(filename?)` | 워크플로우를 YAML로 컴파일하여 출력합니다. |
+| `toJSON()` | `WorkflowDefinition` 객체로 직렬화합니다. |
 
 #### `WorkflowConfig`
 
@@ -47,6 +56,23 @@ const workflow = new Workflow({
 workflow.build("ci");
 ```
 
+#### `Workflow.fromObject()` 예제
+
+```typescript
+const workflow = Workflow.fromObject({
+  name: "Raw Workflow",
+  on: { push: {} },
+  jobs: {
+    test: {
+      "runs-on": "ubuntu-latest",
+      steps: [{ run: "echo hello" }],
+    },
+  },
+});
+
+workflow.build("raw");
+```
+
 ---
 
 ### `Job`
@@ -55,17 +81,41 @@ workflow.build("ci");
 
 ```typescript
 class Job {
-  constructor(runsOn: string | string[])
+  constructor(runsOn: string | string[], options?: Partial<JobDefinition>)
   addStep(step: Step): this
-  needs(jobs: string[]): this
-  strategy(strategy: JobStrategy): this
+  needs(jobs: string | string[]): this
   env(variables: Record<string, string>): this
-  outputs(outputs: Record<string, string>): this
   when(condition: string): this
-  permissions(p: Permissions): this
+  permissions(perms: Permissions): this
+  outputs(outputs: Record<string, string>): this
+  strategy(strategy: JobStrategy): this
   continueOnError(v: boolean): this
   timeoutMinutes(m: number): this
+  toJSON(): JobDefinition
 }
+```
+
+| 메서드 | 설명 |
+|--------|------|
+| `addStep(step)` | job에 스텝을 추가합니다. |
+| `needs(jobs)` | job 의존성을 설정합니다. |
+| `env(variables)` | 환경 변수를 설정합니다. |
+| `when(condition)` | job의 `if` 조건을 설정합니다 (예: `"github.ref == 'refs/heads/main'"`). |
+| `permissions(perms)` | job 수준의 권한을 설정합니다 (예: `{ contents: 'read' }`). |
+| `outputs(outputs)` | job 출력을 정의합니다. |
+| `strategy(strategy)` | 매트릭스 전략을 설정합니다. |
+| `continueOnError(v)` | `continue-on-error` 플래그를 설정합니다. |
+| `timeoutMinutes(m)` | `timeout-minutes` 값을 설정합니다. |
+| `toJSON()` | `JobDefinition` 객체로 직렬화합니다. |
+
+생성자의 `options` 파라미터로 모든 옵션을 한번에 설정할 수 있습니다:
+
+```typescript
+const job = new Job("ubuntu-latest", {
+  needs: ["test"],
+  env: { NODE_ENV: "production" },
+  "timeout-minutes": 30,
+});
 ```
 
 #### 예제
@@ -76,6 +126,8 @@ const job = new Job("ubuntu-latest")
   .env({
     NODE_ENV: "production",
   })
+  .when("github.event_name == 'push'")
+  .permissions({ contents: "read" })
   .strategy({
     matrix: {
       node: ["18", "20", "22"],
@@ -84,6 +136,8 @@ const job = new Job("ubuntu-latest")
   .outputs({
     version: "${{ steps.version.outputs.value }}",
   })
+  .continueOnError(false)
+  .timeoutMinutes(30)
   .addStep(checkout({}))
   .addStep({ run: "npm test" });
 ```
@@ -240,17 +294,19 @@ const step = {
 
 ### `CompositeJob`
 
-재사용 가능한 작업 템플릿을 만듭니다.
+TypeScript 클래스 상속을 통해 재사용 가능한 작업 템플릿을 만듭니다. `CompositeJob`은 `Job`을 상속하므로 모든 `Job` 메서드를 사용할 수 있습니다.
 
 ```typescript
-class CompositeJob {
-  constructor(runsOn: string | string[])
-  addStep(step: Step): this
-  needs(jobs: string[]): this
-  strategy(strategy: JobStrategy): this
-  env(variables: Record<string, string>): this
+class CompositeJob extends Job {
+  constructor(runsOn: string | string[], options?: Partial<JobDefinition>)
 }
 ```
+
+`Job`과 달리 `CompositeJob`은 `extends`로 서브클래싱하여 도메인별 파라미터화된 job 템플릿을 만들 때 사용합니다. YAML 출력은 일반 `Job`과 동일합니다.
+
+::: tip CompositeJob vs Job
+일회성 job에는 `Job`을 직접 사용하세요. 공통 패턴을 파라미터와 함께 캡슐화한 **재사용 가능한 클래스**를 만들 때 `CompositeJob`을 사용하세요.
+:::
 
 #### 예제
 
@@ -315,6 +371,100 @@ const workflow = new Workflow({
 })
   .addJob("deploy-staging", new DeployJob("staging"))
   .addJob("deploy-production", new DeployJob("production").needs(["deploy-staging"]));
+```
+
+---
+
+### `CallJob`
+
+다른 리포지토리나 파일에 정의된 [재사용 가능한 워크플로우](https://docs.github.com/en/actions/using-workflows/reusing-workflows)를 호출합니다. `Job`과 달리 `CallJob`은 `steps`가 없으며, `uses`를 통해 참조된 워크플로우에 위임합니다.
+
+```typescript
+class CallJob {
+  constructor(uses: string)
+  with(inputs: Record<string, unknown>): this
+  secrets(s: Record<string, unknown> | 'inherit'): this
+  needs(deps: string | string[]): this
+  when(condition: string): this
+  permissions(perms: Permissions): this
+  toJSON(): object
+}
+```
+
+| 메서드 | 설명 |
+|--------|------|
+| `with(inputs)` | 재사용 워크플로우에 입력값을 전달합니다. |
+| `secrets(s)` | 시크릿을 명시적으로 전달하거나, `'inherit'`로 모든 시크릿을 전달합니다. |
+| `needs(deps)` | job 의존성을 설정합니다. |
+| `when(condition)` | job의 `if` 조건을 설정합니다. |
+| `permissions(perms)` | job 수준의 권한을 설정합니다. |
+
+#### 예제
+
+```typescript
+import { CallJob, Workflow } from "../generated/index.js";
+
+const deploy = new CallJob("octo-org/deploy/.github/workflows/deploy.yml@main")
+  .with({ environment: "production" })
+  .secrets("inherit")
+  .needs(["build"]);
+
+const workflow = new Workflow({
+  name: "Release",
+  on: { push: { tags: ["v*"] } },
+})
+  .addJob("deploy", deploy);
+
+workflow.build("release");
+```
+
+생성되는 YAML:
+
+```yaml
+jobs:
+  deploy:
+    uses: octo-org/deploy/.github/workflows/deploy.yml@main
+    with:
+      environment: production
+    secrets: inherit
+    needs:
+      - build
+```
+
+---
+
+### `CallAction`
+
+gaji로 빌드한 로컬 composite 또는 JavaScript 액션을 job의 스텝으로 참조합니다.
+
+```typescript
+class CallAction {
+  constructor(uses: string)
+  static from(action: CompositeAction | JavaScriptAction): CallAction
+  toJSON(): Step
+}
+```
+
+| 메서드 | 설명 |
+|--------|------|
+| `from(action)` | `CompositeAction` 또는 `JavaScriptAction` 인스턴스로부터 `CallAction`을 생성합니다. `.github/actions/<id>` 경로를 자동으로 해석합니다. |
+
+#### 예제
+
+```typescript
+import { CompositeAction, CallAction, Job } from "../generated/index.js";
+
+const setupEnv = new CompositeAction({
+  name: "Setup",
+  description: "환경 설정",
+});
+setupEnv.build("setup-env");
+
+const job = new Job("ubuntu-latest")
+  .addStep({
+    ...CallAction.from(setupEnv).toJSON(),
+    with: { "node-version": "20" },
+  });
 ```
 
 ---

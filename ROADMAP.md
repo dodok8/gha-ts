@@ -16,10 +16,11 @@ gaji is a working CLI tool with all core features implemented. It is self-dogfoo
 - npm distribution with platform-specific binary packages
 - CI/CD automation via release-plz
 - VitePress documentation site with English/Korean i18n (https://gaji.gaebalgom.work)
-- 95 tests (92 unit + 3 integration)
+- 96 tests (92 unit + 4 integration)
 - JavaScriptAction class for node-based GitHub Actions
 - npx support for running without installation
 - Build timing, progress bars, cache expiration policy
+- CompositeJob class for reusable job templates via class inheritance
 
 ---
 
@@ -57,6 +58,7 @@ gaji is a working CLI tool with all core features implemented. It is self-dogfoo
 - Execution time measurement for builds (`Instant` timer in build pipeline)
 - Progress indicators with `indicatif` (action download, type generation)
 - Cache expiration policy (enforce `is_expired()` with configurable TTL via `build.cache_ttl_days`)
+- CompositeJob class for reusable job templates via TypeScript class inheritance
 
 ---
 
@@ -69,6 +71,13 @@ gaji is a working CLI tool with all core features implemented. It is self-dogfoo
 - [ ] YAML lint rules and warnings (unnamed jobs, unknown fields)
 - [ ] Template literal support in `getAction()` calls
 - [ ] Respect `.gitignore` patterns when scanning
+
+### Documentation Gaps (implemented but undocumented)
+- [x] Document `CallJob` class (reusable workflow calls via `uses`)
+- [x] Document `Job.when()`, `Job.permissions()`, `Job.continueOnError()`, `Job.timeoutMinutes()` methods
+- [x] Document `Workflow.fromObject()` static method
+- [x] Document `Job` constructor optional `options` parameter
+- [x] Document `CompositeJob` class in guide/examples
 - [ ] Docs: search, hover to show type
 
 ### Distribution

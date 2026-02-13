@@ -63,7 +63,8 @@ tests/
 
 workflows/           # gaji's own CI workflows (self-dogfooding)
 ├── ci.ts
-└── js.ts            # JavaScript action example (hello-world)
+├── js.ts            # JavaScript action example (hello-world)
+└── new.ts           # CompositeJob example (deploy template)
 
 npm/                 # NPM distribution wrapper
 ├── gaji/            # Main npm package (postinstall downloads binary)
@@ -82,7 +83,7 @@ The core pipeline is: **TypeScript → Parse → Execute → YAML**
 
 ## Key Design Patterns
 
-- **Builder pattern**: `WorkflowBuilder`, `Job`, `Workflow`, `CallAction`, `JavaScriptAction`
+- **Builder pattern**: `WorkflowBuilder`, `Job`, `CompositeJob`, `Workflow`, `CallJob`, `CallAction`, `CompositeAction`, `JavaScriptAction`
 - **Visitor pattern**: `ActionRefExtractor` traverses oxc AST nodes
 - **Error handling**: `anyhow::Result<T>` with `?` propagation throughout; `thiserror` for typed errors
 - **Async**: Tokio runtime for all I/O-bound operations (HTTP, filesystem)
@@ -167,7 +168,23 @@ The release binary is optimized for size (important for npm distribution):
 
 **Adding a new action type** (like `JavaScriptAction`): Add runtime class to `generator/templates.rs` (`JOB_WORKFLOW_RUNTIME_TEMPLATE`), add TypeScript interfaces to `BASE_TYPES_TEMPLATE`, add type declaration in `generator/mod.rs` (`generate_index_dts`). Output type "action" writes to `.github/actions/<id>/action.yml`.
 
+**Adding a new job type** (like `CompositeJob`): Add runtime class to `generator/templates.rs` (`JOB_WORKFLOW_RUNTIME_TEMPLATE`), add type declaration in `generator/mod.rs` (`generate_index_dts`). Job types that extend `Job` inherit its `toJSON()` and produce standard `JobDefinition` output.
+
 **Modifying the build pipeline**: Core logic is in `builder.rs` (orchestration) and `executor.rs` (JS execution). The executor strips types with oxc and runs the result in QuickJS.
+
+## Runtime Class Hierarchy
+
+The TypeScript runtime classes in `generator/templates.rs` follow this hierarchy:
+
+| Class | Purpose | Output Type | Build Target |
+|-------|---------|-------------|--------------|
+| `Job` | Standard workflow job | `JobDefinition` | Part of `Workflow` |
+| `CompositeJob` | Reusable job template (extends `Job`) | `JobDefinition` | Part of `Workflow` |
+| `Workflow` | Complete workflow | `WorkflowDefinition` | `.github/workflows/<id>.yml` |
+| `CompositeAction` | Reusable composite action | `action.yml` (composite) | `.github/actions/<id>/action.yml` |
+| `JavaScriptAction` | Node.js-based action | `action.yml` (node) | `.github/actions/<id>/action.yml` |
+| `CallJob` | Reusable workflow call (no steps) | `{ uses: ... }` | Part of `Workflow` |
+| `CallAction` | Reference to local action | `{ uses: "./.github/actions/<id>" }` | Step in a `Job` |
 
 ## Files to Never Edit Manually
 
