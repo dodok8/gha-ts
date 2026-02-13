@@ -1,0 +1,17 @@
+{
+  "name": "@gaji/darwin-arm64",
+  "version": "0.1.0",
+  "description": "gaji native binary for darwin-arm64",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/dodok8/gaji"
+  },
+  "os": ["darwin"],
+  "cpu": ["arm64"],
+  "files": ["bin/"],
+  "publishConfig": {
+    "provenance": true
+  },
+  "preferUnplugged": true
+}

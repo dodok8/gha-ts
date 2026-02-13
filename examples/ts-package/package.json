@@ -1,0 +1,20 @@
+{
+  "name": "example-ts-package",
+  "version": "1.0.0",
+  "description": "Example TypeScript package with gaji CI workflow",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "test": "echo \"Running tests...\" && exit 0",
+    "lint": "echo \"Running linter...\" && exit 0",
+    "gha:dev": "gaji dev",
+    "gha:watch": "gaji dev --watch",
+    "gha:build": "gaji build"
+  },
+  "devDependencies": {
+    "gaji": "^0.2.4",
+    "typescript": "^5.0.0"
+  }
+}

@@ -1,0 +1,40 @@
+# Rust
+/target
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# gaji generated files
+generated/
+.gaji-cache.json
+.gaji.local.toml
+
+# Node.js (for npm wrapper)
+node_modules/
+dist/
+*.tgz
+
+# npm platform binaries (populated by CI)
+npm/platform-*/bin/
+
+# VitePress
+docs/.vitepress/cache
+docs/.vitepress/dist
+docs/node_modules/
+
+# Test artifacts
+*.log
+coverage/
+
+# VitePress documentation
+docs/.vitepress/cache
+docs/.vitepress/dist
+docs/node_modules

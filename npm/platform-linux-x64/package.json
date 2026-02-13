@@ -1,0 +1,17 @@
+{
+  "name": "@gaji/linux-x64",
+  "version": "0.1.0",
+  "description": "gaji native binary for linux-x64",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/dodok8/gaji"
+  },
+  "os": ["linux"],
+  "cpu": ["x64"],
+  "files": ["bin/"],
+  "publishConfig": {
+    "provenance": true
+  },
+  "preferUnplugged": true
+}
