@@ -190,7 +190,7 @@ const publishNpm = new Job("ubuntu-latest", {
   })
   .addStep({
     name: "Sync versions",
-    run: "bash scripts/sync-versions.sh",
+    run: "bash scripts/sync.sh",
   })
   .addStep({
     name: "Publish platform packages",
