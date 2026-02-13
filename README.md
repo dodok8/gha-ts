@@ -321,12 +321,12 @@ Token resolution priority: `GITHUB_TOKEN` env var > `.gaji.local.toml` > `.gaji.
 
 ## Documentation
 
-📚 **[Full Documentation](docs/)** (English & 한국어)
+📚 **[Full Documentation](https://gaji.gaebalgom.work)** (English & 한국어)
 
-- [Getting Started](docs/guide/getting-started.md)
-- [Writing Workflows](docs/guide/writing-workflows.md)
-- [CLI Reference](docs/reference/cli.md)
-- [API Reference](docs/reference/api.md)
+- [Getting Started](https://gaji.gaebalgom.work/guide/getting-started)
+- [Writing Workflows](https://gaji.gaebalgom.work/guide/writing-workflows)
+- [CLI Reference](https://gaji.gaebalgom.work/reference/cli)
+- [API Reference](https://gaji.gaebalgom.work/reference/api)
 - [Examples](examples/)
 
 ## Examples
