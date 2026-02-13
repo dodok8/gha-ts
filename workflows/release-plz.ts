@@ -53,7 +53,7 @@ const releasePr = new Job("ubuntu-latest", {
         command: "release-pr",
       },
       env: {
-        GITHUB_TOKEN: "${{ secrets.GITHUB_TOKEN }}",
+        GITHUB_TOKEN: "${{ secrets.PAT }}",
       },
     })
   );
