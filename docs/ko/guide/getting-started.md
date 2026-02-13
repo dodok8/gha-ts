@@ -30,7 +30,7 @@ yarn add -D gaji
 init 명령을 실행하여 프로젝트에서 gaji 설정:
 
 ```bash
-npx gaji init
+gaji init init
 ```
 
 이것은:
@@ -45,8 +45,8 @@ npx gaji init
 사용하려는 GitHub Actions 추가:
 
 ```bash
-npx gaji add actions/checkout@v4
-npx gaji add actions/setup-node@v4
+gaji init add actions/checkout@v4
+gaji init add actions/setup-node@v4
 ```
 
 이것은:
@@ -104,24 +104,24 @@ workflow.build("ci");
 
 ```bash
 # 워크플로우에서 찾은 액션에 대한 타입 생성
-npx gaji dev
+gaji init dev
 
 # 워크플로우를 YAML로 빌드
-npx gaji build
+gaji init build
 ```
 
 ### 방법 2: 감시 모드 (권장)
 
 ```bash
 # 감시 모드 시작 - 새 액션을 추가하면 자동으로 타입 생성
-npx gaji dev --watch
+gaji init dev --watch
 ```
 
 다른 터미널에서:
 
 ```bash
 # 워크플로우 빌드
-npx gaji build
+gaji init build
 ```
 
 생성된 YAML은 `.github/workflows/ci.yml`에 있습니다:
@@ -158,7 +158,7 @@ jobs:
 
 1. **감시 모드 시작**:
    ```bash
-   npx gaji dev --watch
+   gaji init dev --watch
    ```
    터미널에서 계속 실행 상태로 두세요.
 
@@ -169,7 +169,7 @@ jobs:
 
 3. **YAML로 빌드**:
    ```bash
-   npx gaji build
+   gaji init build
    ```
 
 4. **생성된 YAML 검토**:

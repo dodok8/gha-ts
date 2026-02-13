@@ -30,7 +30,7 @@ See [Installation](./installation.md) for more options.
 Run the init command to set up gaji in your project:
 
 ```bash
-npx gaji init
+gaji init init
 ```
 
 This will:
@@ -45,8 +45,8 @@ This will:
 Add GitHub Actions you want to use:
 
 ```bash
-npx gaji add actions/checkout@v4
-npx gaji add actions/setup-node@v4
+gaji init add actions/checkout@v4
+gaji init add actions/setup-node@v4
 ```
 
 This will:
@@ -104,24 +104,24 @@ workflow.build("ci");
 
 ```bash
 # Generate types for actions found in workflows
-npx gaji dev
+gaji init dev
 
 # Build workflows to YAML
-npx gaji build
+gaji init build
 ```
 
 ### Option 2: Watch mode (Recommended)
 
 ```bash
 # Start watch mode - auto-generates types when you add new actions
-npx gaji dev --watch
+gaji init dev --watch
 ```
 
 In another terminal:
 
 ```bash
 # Build workflows
-npx gaji build
+gaji init build
 ```
 
 The generated YAML will be in `.github/workflows/ci.yml`:
@@ -158,7 +158,7 @@ Follow this workflow for the best experience:
 
 1. **Start watch mode**:
    ```bash
-   npx gaji dev --watch
+   gaji init dev --watch
    ```
    Leave this running in a terminal.
 
@@ -169,7 +169,7 @@ Follow this workflow for the best experience:
 
 3. **Build to YAML**:
    ```bash
-   npx gaji build
+   gaji init build
    ```
 
 4. **Review the generated YAML**:
