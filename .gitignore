@@ -33,3 +33,8 @@ docs/node_modules/
 # Test artifacts
 *.log
 coverage/
+
+# VitePress documentation
+docs/.vitepress/cache
+docs/.vitepress/dist
+docs/node_modules

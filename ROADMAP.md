@@ -1333,7 +1333,7 @@ Type-safe GitHub Actions workflows in TypeScript - Complete Development Plan
       println!("  3. Edit workflows/*.ts");
       println!("  4. Run: npm run gha:build");
       println!();
-      println!("Learn more: https://github.com/your-org/gaji");
+      println!("Learn more: https://github.com/dodok8/gaji");
   }
   ```
 
@@ -1392,7 +1392,7 @@ Next steps:
   3. Edit workflows/ci.ts
   4. Run: npm run gha:build
 
-Learn more: https://github.com/your-org/gaji
+Learn more: https://github.com/dodok8/gaji
 ```
 
 **With Existing Workflows:**
@@ -1476,7 +1476,7 @@ Found 3 existing workflow(s):
     ],
     "repository": {
       "type": "git",
-      "url": "https://github.com/your-org/gaji"
+      "url": "https://github.com/dodok8/gaji"
     },
     "os": ["darwin", "linux", "win32"],
     "cpu": ["x64", "arm64"]
@@ -2277,8 +2277,8 @@ Found 3 existing workflow(s):
   ```ruby
   class GhaTs < Formula
     desc "Type-safe GitHub Actions workflows in TypeScript"
-    homepage "https://github.com/your-org/gaji"
-    url "https://github.com/your-org/gaji/archive/v1.0.0.tar.gz"
+    homepage "https://github.com/dodok8/gaji"
+    url "https://github.com/dodok8/gaji/archive/v1.0.0.tar.gz"
     sha256 "..."
     
     depends_on "rust" => :build
