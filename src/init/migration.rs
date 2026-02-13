@@ -227,7 +227,7 @@ fn generate_step(ts: &mut String, step: &serde_yaml::Value, actions: &[String]) 
             ts.push_str(&format!("        name: \"{}\",\n", escape_js_string(name)));
         }
         if run.contains('\n') {
-            ts.push_str(&format!("        run: `{}`", run.replace('`', "\\`")));
+            ts.push_str(&format!("        run: `{}`", run.replace('`', "\\`").replace("${", "\\${")));
         } else {
             ts.push_str(&format!("        run: \"{}\"", escape_js_string(run)));
         }
@@ -319,7 +319,7 @@ fn yaml_value_to_js(value: &serde_yaml::Value, indent: usize) -> String {
         serde_yaml::Value::Number(n) => n.to_string(),
         serde_yaml::Value::String(s) => {
             if s.contains('\n') {
-                format!("`{}`", s.replace('`', "\\`"))
+                format!("`{}`", s.replace('`', "\\`").replace("${", "\\${"))
             } else {
                 format!("\"{}\"", escape_js_string(s))
             }
@@ -497,6 +497,40 @@ jobs:
     fn test_escape_js_string() {
         assert_eq!(escape_js_string(r#"say "hello""#), r#"say \"hello\""#);
         assert_eq!(escape_js_string("line1\nline2"), "line1\\nline2");
+    }
+
+    #[test]
+    fn test_yaml_value_to_js_multiline_string_escapes_dollar_brace() {
+        let val =
+            serde_yaml::Value::String("echo ${{ secrets.TOKEN }}\necho done".to_string());
+        let result = yaml_value_to_js(&val, 0);
+        assert!(
+            result.contains("\\${"),
+            "Expected \\${{ but got: {}",
+            result
+        );
+    }
+
+    #[test]
+    fn test_generate_step_multiline_run_escapes_dollar_brace() {
+        let yaml_content = r#"
+name: CI
+on: push
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Multi-line with expression
+        run: |
+          echo ${{ secrets.TOKEN }}
+          echo done
+"#;
+        let ts = generate_typescript_from_yaml(yaml_content, "ci").unwrap();
+        assert!(
+            ts.contains("\\${{ secrets.TOKEN }}"),
+            "Expected escaped \\${{ but got: {}",
+            ts
+        );
     }
 
     #[test]
