@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.6](https://github.com/dodok8/gaji/compare/v0.2.5...v0.2.6) - 2026-02-13
+
+### Fixed
+
+- escape ${{ }} expressions in template literals during migration ([#26](https://github.com/dodok8/gaji/pull/26))
+
+### Other
+
+- update documentation links to gaji.gaebalgom.work
+- add paths filter to vitepress deploy workflow
+- make documentation webpage ([#22](https://github.com/dodok8/gaji/pull/22)) ([#23](https://github.com/dodok8/gaji/pull/23))
+- add CLAUDE.md with codebase documentation for AI assistants ([#24](https://github.com/dodok8/gaji/pull/24))
+
 ## [0.2.5](https://github.com/dodok8/gaji/compare/v0.2.4...v0.2.5) - 2026-02-12
 
 ### Other
