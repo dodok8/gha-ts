@@ -160,10 +160,16 @@ pub struct GitHubFetcher {
     cache: Cache,
     token: Option<String>,
     api_url: Option<String>,
+    cache_ttl_days: u64,
 }
 
 impl GitHubFetcher {
-    pub fn new(cache: Cache, token: Option<String>, api_url: Option<String>) -> Self {
+    pub fn new(
+        cache: Cache,
+        token: Option<String>,
+        api_url: Option<String>,
+        cache_ttl_days: u64,
+    ) -> Self {
         let client = reqwest::Client::builder()
             .timeout(Duration::from_secs(30))
             .user_agent("gaji")
@@ -175,13 +181,16 @@ impl GitHubFetcher {
             cache,
             token,
             api_url,
+            cache_ttl_days,
         }
     }
 
     pub async fn fetch_action_metadata(&self, action_ref_str: &str) -> Result<ActionMetadata> {
-        // Check cache first
-        if let Some(cached) = self.cache.get(action_ref_str) {
-            return Ok(cached);
+        // Check cache first (with TTL expiration)
+        if !self.cache.is_expired(action_ref_str, self.cache_ttl_days) {
+            if let Some(cached) = self.cache.get(action_ref_str) {
+                return Ok(cached);
+            }
         }
 
         let action_ref = ActionRef::parse(action_ref_str)?;

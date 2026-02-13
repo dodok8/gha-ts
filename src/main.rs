@@ -1,4 +1,5 @@
 use std::path::PathBuf;
+use std::time::Instant;
 
 use anyhow::Result;
 use clap::Parser;
@@ -87,11 +88,22 @@ async fn cmd_dev(dir: &str, watch: bool) -> Result<()> {
                 all_refs.len()
             );
 
+            let gen_start = Instant::now();
             let cache = Cache::load_or_create()?;
-            let generator = TypeGenerator::new(cache, PathBuf::from("generated"), token, api_url);
+            let generator = TypeGenerator::with_cache_ttl(
+                cache,
+                PathBuf::from("generated"),
+                token,
+                api_url,
+                config.build.cache_ttl_days,
+            );
             generator.generate_types_for_refs(&all_refs).await?;
 
-            println!("{} Types generated!\n", "✨".green());
+            println!(
+                "{} Types generated in {:.2}s!\n",
+                "✨".green(),
+                gen_start.elapsed().as_secs_f64()
+            );
         }
     }
 
@@ -106,6 +118,8 @@ async fn cmd_dev(dir: &str, watch: bool) -> Result<()> {
 }
 
 async fn cmd_build(input: &str, output: &str, dry_run: bool) -> Result<()> {
+    let start = Instant::now();
+
     if dry_run {
         println!("{} Dry run: previewing workflows...\n", "🔨".cyan());
     } else {
@@ -116,16 +130,23 @@ async fn cmd_build(input: &str, output: &str, dry_run: bool) -> Result<()> {
 
     let built = builder.build_all().await?;
 
+    let elapsed = start.elapsed();
     if built.is_empty() {
         println!("{} No workflows built", "⚠️".yellow());
     } else {
-        println!("\n{} Built {} workflow(s)", "✅".green(), built.len());
+        println!(
+            "\n{} Built {} workflow(s) in {:.2}s",
+            "✅".green(),
+            built.len(),
+            elapsed.as_secs_f64()
+        );
     }
 
     Ok(())
 }
 
 async fn cmd_add(action: &str) -> Result<()> {
+    let start = Instant::now();
     println!("{} Adding action: {}\n", "📦".cyan(), action);
 
     let config = Config::load()?;
@@ -133,7 +154,13 @@ async fn cmd_add(action: &str) -> Result<()> {
     let api_url = config.resolve_api_url();
 
     let cache = Cache::load_or_create()?;
-    let generator = TypeGenerator::new(cache, PathBuf::from("generated"), token, api_url);
+    let generator = TypeGenerator::with_cache_ttl(
+        cache,
+        PathBuf::from("generated"),
+        token,
+        api_url,
+        config.build.cache_ttl_days,
+    );
 
     let mut refs = std::collections::HashSet::new();
     refs.insert(action.to_string());
@@ -143,6 +170,11 @@ async fn cmd_add(action: &str) -> Result<()> {
             for file in files {
                 println!("{} Generated {}", "✅".green(), file.display());
             }
+            println!(
+                "\n{} Done in {:.2}s",
+                "✨".green(),
+                start.elapsed().as_secs_f64()
+            );
         }
         Err(e) => {
             eprintln!("{} Failed to generate types: {}", "❌".red(), e);

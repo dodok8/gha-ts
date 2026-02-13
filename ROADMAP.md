@@ -4,7 +4,7 @@ Type-safe GitHub Actions workflows in TypeScript
 
 ---
 
-## Current Status (v0.2.7)
+## Current Status (v0.2.8)
 
 gaji is a working CLI tool with all core features implemented. It is self-dogfooding (uses itself for its own CI/CD workflows) and has been released on both crates.io and npm.
 
@@ -16,8 +16,9 @@ gaji is a working CLI tool with all core features implemented. It is self-dogfoo
 - npm distribution with platform-specific binary packages
 - CI/CD automation via release-plz
 - VitePress documentation site with English/Korean i18n (https://gaji.gaebalgom.work)
-- 93 tests (90 unit + 3 integration)
+- 95 tests (92 unit + 3 integration)
 - JavaScriptAction class for node-based GitHub Actions
+- npx support for running without installation
 
 ---
 
@@ -53,15 +54,21 @@ gaji is a working CLI tool with all core features implemented. It is self-dogfoo
 
 ---
 
+## In Progress (v0.3.0)
+
+### Easy Wins — Polish & UX
+- [x] Execution time measurement for builds (`Instant` timer in build pipeline)
+- [x] Progress indicators with `indicatif` (action download, type generation)
+- [x] Cache expiration policy (enforce `is_expired()` with configurable TTL via `build.cache_ttl_days`)
+
+---
+
 ## Remaining Work
 
 ### Polish & Quality
 - [ ] Parallel action.yml downloads (futures::stream::buffer_unordered)
 - [ ] Memory/LRU cache for action metadata
-- [ ] Cache expiration policy (auto re-validate after N days)
 - [ ] Better error messages with suggestions ("Did you mean...?")
-- [ ] Improved progress indicators (indicatif)
-- [ ] Execution time measurement for builds
 - [ ] YAML lint rules and warnings (unnamed jobs, unknown fields)
 - [ ] Template literal support in `getAction()` calls
 - [ ] Respect `.gitignore` patterns when scanning
@@ -90,6 +97,7 @@ gaji is a working CLI tool with all core features implemented. It is self-dogfoo
 
 | Version | Date | Highlights |
 |---------|------|------------|
+| v0.2.8 | 2026-02-13 | npx support |
 | v0.2.7 | 2026-02-13 | JavaScriptAction class |
 | v0.2.6 | 2026-02-13 | Documentation site, expression escaping fix |
 | v0.2.5 | 2026-02-12 | Output directory restructuring |

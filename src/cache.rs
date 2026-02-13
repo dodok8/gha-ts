@@ -258,4 +258,82 @@ mod tests {
             "Test Action"
         );
     }
+
+    #[test]
+    fn test_is_expired_missing_entry() {
+        let cache = Cache {
+            data: CacheData {
+                version: 1,
+                entries: HashMap::new(),
+            },
+            cache_file: PathBuf::from(".test-cache.json"),
+        };
+        assert!(cache.is_expired("nonexistent@v1", 30));
+    }
+
+    #[test]
+    fn test_is_expired_fresh_entry() {
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+        let mut entries = HashMap::new();
+        entries.insert(
+            "actions/checkout@v4".to_string(),
+            CacheEntry {
+                action_ref: "actions/checkout@v4".to_string(),
+                content_hash: "hash".to_string(),
+                generated_at: now,
+                metadata: ActionMetadata {
+                    name: "Checkout".to_string(),
+                    description: None,
+                    inputs: None,
+                    outputs: None,
+                    runs: None,
+                },
+            },
+        );
+        let cache = Cache {
+            data: CacheData {
+                version: 1,
+                entries,
+            },
+            cache_file: PathBuf::from(".test-cache.json"),
+        };
+        assert!(!cache.is_expired("actions/checkout@v4", 30));
+    }
+
+    #[test]
+    fn test_is_expired_old_entry() {
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+        // 31 days ago
+        let old_time = now - (31 * 24 * 60 * 60);
+        let mut entries = HashMap::new();
+        entries.insert(
+            "actions/checkout@v4".to_string(),
+            CacheEntry {
+                action_ref: "actions/checkout@v4".to_string(),
+                content_hash: "hash".to_string(),
+                generated_at: old_time,
+                metadata: ActionMetadata {
+                    name: "Checkout".to_string(),
+                    description: None,
+                    inputs: None,
+                    outputs: None,
+                    runs: None,
+                },
+            },
+        );
+        let cache = Cache {
+            data: CacheData {
+                version: 1,
+                entries,
+            },
+            cache_file: PathBuf::from(".test-cache.json"),
+        };
+        assert!(cache.is_expired("actions/checkout@v4", 30));
+    }
 }

@@ -5,6 +5,7 @@ use std::collections::HashSet;
 use std::path::{Path, PathBuf};
 
 use anyhow::Result;
+use indicatif::{ProgressBar, ProgressStyle};
 use tokio::fs;
 
 use crate::cache::Cache;
@@ -25,8 +26,18 @@ impl TypeGenerator {
         token: Option<String>,
         api_url: Option<String>,
     ) -> Self {
+        Self::with_cache_ttl(cache, output_dir, token, api_url, 30)
+    }
+
+    pub fn with_cache_ttl(
+        cache: Cache,
+        output_dir: PathBuf,
+        token: Option<String>,
+        api_url: Option<String>,
+        cache_ttl_days: u64,
+    ) -> Self {
         Self {
-            fetcher: GitHubFetcher::new(cache, token, api_url),
+            fetcher: GitHubFetcher::new(cache, token, api_url, cache_ttl_days),
             output_dir,
         }
     }
@@ -45,17 +56,31 @@ impl TypeGenerator {
 
         let mut action_infos = Vec::new();
 
+        let pb = ProgressBar::new(action_refs.len() as u64);
+        pb.set_style(
+            ProgressStyle::default_bar()
+                .template("   {spinner:.green} [{bar:30.cyan/dim}] {pos}/{len} {msg}")
+                .unwrap()
+                .progress_chars("━━─"),
+        );
+
         for action_ref in action_refs {
+            pb.set_message(action_ref.clone());
             match self.generate_type_for_ref(action_ref).await {
                 Ok((path, info)) => {
                     generated_files.push(path);
                     action_infos.push(info);
                 }
                 Err(e) => {
-                    eprintln!("Failed to generate types for {}: {}", action_ref, e);
+                    pb.suspend(|| {
+                        eprintln!("Failed to generate types for {}: {}", action_ref, e);
+                    });
                 }
             }
+            pb.inc(1);
         }
+
+        pb.finish_and_clear();
 
         // Remove old index.ts if it exists (replaced by index.d.ts + index.js)
         let old_index_ts = self.output_dir.join("index.ts");

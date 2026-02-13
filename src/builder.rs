@@ -3,6 +3,7 @@ use std::process::Command;
 
 use anyhow::{Context, Result};
 use colored::Colorize;
+use indicatif::{ProgressBar, ProgressStyle};
 use tokio::fs;
 
 use crate::executor;
@@ -42,16 +43,35 @@ impl WorkflowBuilder {
 
         let mut built_files = Vec::new();
 
-        for file in workflow_files {
-            match self.build_workflow(&file).await {
+        let pb = ProgressBar::new(workflow_files.len() as u64);
+        pb.set_style(
+            ProgressStyle::default_bar()
+                .template("   {spinner:.green} [{bar:30.cyan/dim}] {pos}/{len} {msg}")
+                .unwrap()
+                .progress_chars("━━─"),
+        );
+
+        for file in &workflow_files {
+            let filename = file
+                .file_name()
+                .unwrap_or_default()
+                .to_string_lossy()
+                .to_string();
+            pb.set_message(filename);
+            match self.build_workflow(file).await {
                 Ok(output_paths) => {
                     built_files.extend(output_paths);
                 }
                 Err(e) => {
-                    eprintln!("{} Failed to build {}: {}", "❌".red(), file.display(), e);
+                    pb.suspend(|| {
+                        eprintln!("{} Failed to build {}: {}", "❌".red(), file.display(), e);
+                    });
                 }
             }
+            pb.inc(1);
         }
+
+        pb.finish_and_clear();
 
         Ok(built_files)
     }

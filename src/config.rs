@@ -49,6 +49,9 @@ pub struct BuildConfig {
 
     #[serde(default = "default_true")]
     pub format: bool,
+
+    #[serde(default = "default_cache_ttl_days")]
+    pub cache_ttl_days: u64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -85,6 +88,7 @@ impl Default for BuildConfig {
         Self {
             validate: true,
             format: true,
+            cache_ttl_days: default_cache_ttl_days(),
         }
     }
 }
@@ -103,6 +107,10 @@ fn default_generated_dir() -> String {
 
 fn default_debounce_ms() -> u64 {
     300
+}
+
+fn default_cache_ttl_days() -> u64 {
+    30
 }
 
 fn default_true() -> bool {
@@ -195,6 +203,7 @@ mod tests {
         assert_eq!(config.project.generated_dir, "generated");
         assert_eq!(config.watch.debounce_ms, 300);
         assert!(config.build.validate);
+        assert_eq!(config.build.cache_ttl_days, 30);
     }
 
     #[test]
