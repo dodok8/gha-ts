@@ -190,20 +190,13 @@ TypeScript 소스와 생성된 YAML을 **모두** 커밋해야 합니다:
 - **TypeScript** (`workflows/*.ts`): 소스 코드, 버전 관리
 - **YAML** (`.github/workflows/*.yml`): GitHub Actions가 실행하는 파일
 
-## 중요: 자동 컴파일 피하기
+## 중요: 자동 컴파일
 
-::: warning Race Condition 경고
-push 시 TypeScript를 YAML로 자동 컴파일하는 GitHub Actions 워크플로우를 만들 수 있지만, **권장하지 않습니다**.
+::: warning 중요
+push 시 TypeScript를 YAML로 자동 컴파일하는 워크플로우를 만들 수 있지만, **권장하지 않습니다**. 항상 로컬에서 컴파일하고 검토한 후 커밋하세요.
 
-**문제**: 자동 컴파일 워크플로우가 YAML이 업데이트되는 동안 실행되어 다음과 같은 문제가 발생할 수 있습니다:
-- 워크플로우 실패
-- 예상치 못한 동작
-- 디버그하기 어려운 문제
-
-**해결책**: 항상 로컬에서 컴파일하고 검토한 후 커밋하세요.
+GitHub Actions 트리거의 복잡성(예: `paths` 필터링, PAT 토큰 관리, 무한 루프 방지)을 감수할 의향이 있다면, 자동 컴파일 워크플로우를 구성할 수 있습니다. 동작하는 예시는 [`workflows/update-workflows.ts`](https://github.com/dodok8/gaji/blob/main/workflows/update-workflows.ts)를 참고하세요.
 :::
-
-이 저장소에는 시연 목적으로 자동 컴파일 워크플로우 예제가 있지만, 프로덕션 사용에는 권장하지 않습니다.
 
 ## 다음 단계
 

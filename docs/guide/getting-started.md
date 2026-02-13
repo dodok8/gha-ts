@@ -190,20 +190,13 @@ You should commit **both** the TypeScript source and the generated YAML:
 - **TypeScript** (`workflows/*.ts`): Source of truth, version controlled
 - **YAML** (`.github/workflows/*.yml`): What GitHub Actions executes
 
-## Important: Avoid Auto-compilation
+## Important: Auto-compilation
 
-::: warning Race Condition Warning
-While it's technically possible to create a GitHub Actions workflow that automatically compiles TypeScript to YAML on push, **this is NOT recommended**.
+::: warning Important
+While you can create a workflow that auto-compiles TypeScript to YAML on push, **this is NOT recommended**. Always compile and review locally before committing.
 
-**Problem**: The auto-compilation workflow might run while the YAML is being updated, causing:
-- Workflow failures
-- Unexpected behavior
-- Hard-to-debug issues
-
-**Solution**: Always compile and review workflows locally before committing.
+If you're willing to handle the complexity of GitHub Actions triggers (e.g., filtering `paths`, managing PAT tokens, avoiding infinite loops), you can set up an auto-compilation workflow. See [`workflows/update-workflows.ts`](https://github.com/dodok8/gaji/blob/main/workflows/update-workflows.ts) for a working example.
 :::
-
-This repository has an example auto-compile workflow for demonstration purposes, but it's not recommended for production use.
 
 ## Next Steps
 

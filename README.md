@@ -125,17 +125,11 @@ You should commit **both** the TypeScript source (`workflows/*.ts`) and the gene
 - **TypeScript**: Source of truth for your workflows
 - **YAML**: What GitHub Actions actually executes
 
-#### ⚠️ Important: Avoid Auto-compilation in CI
+#### ⚠️ Important: Auto-compilation in CI
 
-While it's technically possible to create a GitHub Actions workflow that automatically compiles TypeScript to YAML on push, **this is NOT recommended** because:
+While you can create a workflow that auto-compiles TypeScript to YAML on push, **this is NOT recommended**. Always compile and review workflows locally before committing.
 
-1. **Race Condition**: The auto-compilation workflow might try to run while the YAML file is being updated, causing failures
-2. **Complexity**: Adds unnecessary complexity to your CI/CD pipeline
-3. **Debugging**: Harder to debug workflow issues when the YAML is constantly being regenerated
-
-**Best Practice**: Always compile and review workflows locally before committing.
-
-> **Note**: This repository includes an example auto-compile workflow for demonstration purposes only. It's not recommended for production use.
+If you're willing to handle the complexity of GitHub Actions triggers (e.g., filtering `paths`, managing PAT tokens, avoiding infinite loops), you can set up an auto-compilation workflow. See [`workflows/update-workflows.ts`](https://github.com/dodok8/gaji/blob/main/workflows/update-workflows.ts) for a working example.
 
 ### Composite Actions
 

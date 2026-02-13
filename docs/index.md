@@ -167,7 +167,9 @@ This makes it easy to debug, inspect, or integrate workflows into other tools!
 5. **Commit both TypeScript and YAML**
 
 ::: warning Important
-While you can create a workflow that auto-compiles TypeScript to YAML on push, **this is NOT recommended** due to race condition issues. Always compile and review locally before committing.
+While you can create a workflow that auto-compiles TypeScript to YAML on push, **this is NOT recommended**. Always compile and review locally before committing.
+
+If you're willing to handle the complexity of GitHub Actions triggers (e.g., filtering `paths`, managing PAT tokens, avoiding infinite loops), you can set up an auto-compilation workflow. See [`workflows/update-workflows.ts`](https://github.com/dodok8/gaji/blob/main/workflows/update-workflows.ts) for a working example.
 :::
 
 ## Learn More

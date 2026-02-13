@@ -167,7 +167,9 @@ deno run workflows/ci.ts
 5. **TypeScript와 YAML 모두 커밋**
 
 ::: warning 중요
-push 시 TypeScript를 YAML로 자동 컴파일하는 워크플로우를 만들 수 있지만, race condition 문제로 인해 **권장하지 않습니다**. 항상 로컬에서 컴파일하고 검토한 후 커밋하세요.
+push 시 TypeScript를 YAML로 자동 컴파일하는 워크플로우를 만들 수 있지만, **권장하지 않습니다**. 항상 로컬에서 컴파일하고 검토한 후 커밋하세요.
+
+GitHub Actions 트리거의 복잡성(예: `paths` 필터링, PAT 토큰 관리, 무한 루프 방지)을 감수할 의향이 있다면, 자동 컴파일 워크플로우를 구성할 수 있습니다. 동작하는 예시는 [`workflows/update-workflows.ts`](https://github.com/dodok8/gaji/blob/main/workflows/update-workflows.ts)를 참고하세요.
 :::
 
 ## 더 알아보기
