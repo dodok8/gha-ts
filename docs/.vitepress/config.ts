@@ -128,5 +128,6 @@ export default defineConfig({
       message: "Released under the MIT License.",
       copyright: "Copyright © 2026-present",
     },
+    search: { provider: "local" },
   },
 });
