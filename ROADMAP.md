@@ -17,87 +17,110 @@ Type-safe GitHub Actions workflows in TypeScript - Complete Development Plan
 - Self-dogfooding (uses itself for CI/CD)
 
 **Tech Stack**:
-- Core: Rust
-- Parser: oxc (TypeScript AST)
-- CLI: clap
+- Core: Rust (2021 edition)
+- Parser: oxc (TypeScript AST parsing, type stripping, codegen)
+- JS Runtime: rquickjs (QuickJS, for executing workflows without Node.js)
+- CLI: clap (derive)
 - File watching: notify
 - HTTP: reqwest
 - YAML: serde_yaml
+- Config: toml
+- Interactive prompts: dialoguer
 
 ---
 
 ## Phase 0: Project Setup
 
 ### 0.1 Repository Initialization
-- [ ] Create GitHub repository
-- [ ] Initialize Rust project (`cargo init`)
-- [ ] Setup `.gitignore`
-- [ ] Choose license (MIT/Apache-2.0)
-- [ ] Write basic README.md structure
+- [x] Create GitHub repository
+- [x] Initialize Rust project (`cargo init`)
+- [x] Setup `.gitignore`
+- [x] Choose license (MIT)
+- [x] Write basic README.md structure
 
 ### 0.2 Development Environment
-- [ ] Configure Cargo.toml dependencies
+- [x] Configure Cargo.toml dependencies
   ```toml
   [dependencies]
   # CLI
-  clap = { version = "4.0", features = ["derive"] }
-  
+  clap = { version = "4.5", features = ["derive"] }
+
   # File watching
-  notify = "6.0"
-  
+  notify = "8.2"
+
   # HTTP client
-  reqwest = { version = "0.11", features = ["blocking", "json"] }
-  
+  reqwest = { version = "0.13", features = ["json"] }
+
   # Serialization
   serde = { version = "1.0", features = ["derive"] }
   serde_yaml = "0.9"
   serde_json = "1.0"
-  
+
   # Async runtime
   tokio = { version = "1", features = ["full"] }
-  
-  # TypeScript parsing (oxc)
-  oxc_parser = "0.9"
-  oxc_ast = "0.9"
-  oxc_span = "0.9"
-  oxc_allocator = "0.9"
-  
+
+  # TypeScript parsing & transformation (oxc)
+  oxc_allocator = "0.113"
+  oxc_ast = "0.113"
+  oxc_codegen = "0.113"
+  oxc_parser = "0.113"
+  oxc_semantic = "0.113"
+  oxc_span = "0.113"
+  oxc_transformer = "0.113"
+
+  # JavaScript runtime (QuickJS)
+  rquickjs = { version = "0.11", features = ["loader"] }
+
   # Error handling
   anyhow = "1.0"
-  thiserror = "1.0"
-  
+  thiserror = "2.0"
+
   # UI
-  colored = "2.0"
-  indicatif = "0.17"  # progress bar
-  
+  colored = "3.1"
+  indicatif = "0.18"
+  dialoguer = "0.11"
+
+  # Config
+  toml = "0.8"
+  chrono = "0.4"
+
   [dev-dependencies]
-  tempfile = "3.8"
+  tempfile = "3.25"
   ```
 
-- [ ] Design project structure
+- [x] Design project structure
   ```
   gaji/
   ├─ src/
   │  ├─ main.rs           # Entry point
   │  ├─ cli.rs            # CLI command definitions
+  │  ├─ lib.rs            # Library exports
   │  ├─ parser/
   │  │  ├─ mod.rs         # TypeScript parser module
   │  │  ├─ ast.rs         # AST visitor implementation
   │  │  └─ extractor.rs   # Action ref extraction
   │  ├─ fetcher.rs        # GitHub API client
   │  ├─ generator/
-  │  │  ├─ mod.rs
+  │  │  ├─ mod.rs         # Type generation orchestration
   │  │  ├─ types.rs       # TypeScript type generation
-  │  │  └─ templates.rs   # Type templates
+  │  │  └─ templates.rs   # Runtime and type templates
+  │  ├─ executor.rs       # TS→JS stripping + QuickJS execution
   │  ├─ watcher.rs        # File watching
   │  ├─ builder.rs        # YAML building
   │  ├─ cache.rs          # Caching system
-  │  ├─ config.rs         # Configuration management
-  │  └─ lib.rs            # Library exports
+  │  ├─ config.rs         # Configuration management (.gaji.toml)
+  │  └─ init/
+  │     ├─ mod.rs         # Project initialization logic
+  │     ├─ interactive.rs # Interactive prompts
+  │     ├─ migration.rs   # YAML to TypeScript migration
+  │     └─ templates.rs   # Template files for init
+  ├─ npm/                  # NPM package wrapper
+  │  ├─ gaji/             # Main npm package
+  │  └─ platform-*/       # Platform-specific binary packages
   ├─ tests/
-  │  ├─ integration/
-  │  └─ fixtures/         # Test files
-  ├─ examples/            # Example workflows
+  │  └─ integration.rs
+  ├─ examples/             # Example workflows
+  ├─ workflows/            # Project's own gaji workflows (dogfooding)
   └─ Cargo.toml
   ```
 
@@ -106,33 +129,33 @@ Type-safe GitHub Actions workflows in TypeScript - Complete Development Plan
 ## Phase 1: Core Features Implementation
 
 ### 1.1 CLI Framework
-- [ ] Setup CLI structure with `clap`
+- [x] Setup CLI structure with `clap`
   ```rust
   // src/cli.rs
   #[derive(Parser)]
   #[command(name = "gaji")]
   #[command(about = "Type-safe GitHub Actions workflows in TypeScript")]
-  struct Cli {
+  pub struct Cli {
       #[command(subcommand)]
-      command: Commands,
+      pub command: Commands,
   }
-  
+
   #[derive(Subcommand)]
-  enum Commands {
-      Init { /* ... */ },
-      Dev { /* ... */ },
-      Build { /* ... */ },
+  pub enum Commands {
+      Init { force, skip_examples, migrate, interactive },
+      Dev { dir, watch },
+      Build { input, output, dry_run },
       Add { action: String },
-      Clean,
+      Clean { cache: bool },
   }
   ```
-- [ ] Implement command skeletons
-- [ ] Write help messages
-- [ ] Add version info display
-- [ ] Configure colored output
+- [x] Implement command skeletons
+- [x] Write help messages
+- [x] Add version info display
+- [x] Configure colored output
 
 ### 1.2 TypeScript File Parsing (oxc-based)
-- [ ] Initialize oxc parser with basic configuration
+- [x] Initialize oxc parser with basic configuration
   ```rust
   // src/parser/mod.rs
   pub struct TypeScriptParser {
@@ -140,7 +163,7 @@ Type-safe GitHub Actions workflows in TypeScript - Complete Development Plan
   }
   ```
 
-- [ ] Implement AST Visitor pattern
+- [x] Implement AST Visitor pattern
   ```rust
   // src/parser/ast.rs
   pub struct ActionRefVisitor {
@@ -154,15 +177,15 @@ Type-safe GitHub Actions workflows in TypeScript - Complete Development Plan
   }
   ```
 
-- [ ] Detect `getAction` call patterns
-  - [ ] Direct calls: `getAction("actions/checkout@v4")`
-  - [ ] Variable assignments: `const checkout = getAction("...")`
-  - [ ] Inside arrays: `[getAction("..."), getAction("...")]`
-  - [ ] Inside objects: `{ checkout: getAction("...") }`
-  - [ ] Function arguments: `addStep(getAction("..."))`
-  - [ ] Method chaining: `getAction("...")({ with: {...} })`
+- [x] Detect `getAction` call patterns
+  - [x] Direct calls: `getAction("actions/checkout@v4")`
+  - [x] Variable assignments: `const checkout = getAction("...")`
+  - [x] Inside arrays: `[getAction("..."), getAction("...")]`
+  - [x] Inside objects: `{ checkout: getAction("...") }`
+  - [x] Function arguments: `addStep(getAction("..."))`
+  - [x] Method chaining: `getAction("...")({ with: {...} })`
 
-- [ ] Extract string literal values
+- [x] Extract string literal values
 
 - [ ] Consider template literal support (optional)
   ```typescript
@@ -171,7 +194,7 @@ Type-safe GitHub Actions workflows in TypeScript - Complete Development Plan
   getAction(`actions/checkout@${version}`)
   ```
 
-- [ ] Handle parsing errors
+- [x] Handle parsing errors
   ```rust
   pub enum ParserError {
       ParseFailed(String),
@@ -180,26 +203,10 @@ Type-safe GitHub Actions workflows in TypeScript - Complete Development Plan
   }
   ```
 
-- [ ] Write unit tests
-  ```rust
-  #[cfg(test)]
-  mod tests {
-      #[test]
-      fn test_simple_call() { /* ... */ }
-      
-      #[test]
-      fn test_nested_expressions() { /* ... */ }
-      
-      #[test]
-      fn test_array_and_object() { /* ... */ }
-      
-      #[test]
-      fn test_invalid_syntax() { /* ... */ }
-  }
-  ```
+- [x] Write unit tests
 
 ### 1.3 File System Integration
-- [ ] Implement single file analysis function
+- [x] Implement single file analysis function
   ```rust
   pub async fn analyze_file(path: &Path) -> Result<HashSet<String>> {
       let source = fs::read_to_string(path)?;
@@ -208,7 +215,7 @@ Type-safe GitHub Actions workflows in TypeScript - Complete Development Plan
   }
   ```
 
-- [ ] Implement recursive directory scanning
+- [x] Implement recursive directory scanning
   ```rust
   pub async fn analyze_directory(dir: &Path) -> Result<HashMap<PathBuf, HashSet<String>>> {
       // Find and analyze only .ts files
@@ -217,7 +224,7 @@ Type-safe GitHub Actions workflows in TypeScript - Complete Development Plan
 
 - [ ] Respect `.gitignore` patterns (optional)
 
-- [ ] Show progress indicator
+- [x] Show progress indicator
   ```rust
   let pb = ProgressBar::new(files.len() as u64);
   pb.set_style(ProgressStyle::default_bar()
@@ -226,7 +233,7 @@ Type-safe GitHub Actions workflows in TypeScript - Complete Development Plan
   ```
 
 ### 1.4 GitHub API Integration
-- [ ] Implement HTTP client with `reqwest`
+- [x] Implement HTTP client with `reqwest`
   ```rust
   // src/fetcher.rs
   pub struct GitHubFetcher {
@@ -242,31 +249,31 @@ Type-safe GitHub Actions workflows in TypeScript - Complete Development Plan
   }
   ```
 
-- [ ] Implement `action.yml` download function
+- [x] Implement `action.yml` download function (with `action.yaml` fallback)
 
-- [ ] Parse action references
+- [x] Parse action references
   - `actions/checkout@v4`
   - `owner/repo@tag`
   - `owner/repo/path@ref`
 
-- [ ] Error handling
-  - [ ] 404 Not Found
-  - [ ] Network timeout
-  - [ ] Rate limiting (429)
-  - [ ] Invalid action reference format
+- [x] Error handling
+  - [x] 404 Not Found
+  - [x] Network timeout
+  - [x] Rate limiting (429)
+  - [x] Invalid action reference format
 
-- [ ] Implement retry logic (exponential backoff)
+- [x] Implement retry logic (exponential backoff, 3 retries)
 
-- [ ] Consider rate limiting
-  - [ ] Support GitHub API token (optional)
-  - [ ] Throttle requests
+- [x] Consider rate limiting
+  - [x] Support GitHub API token (env var, config, local config)
+  - [x] GitHub Enterprise support (custom api_url)
 
-- [ ] Write unit tests (mock HTTP)
+- [x] Write unit tests
 
 ### 1.5 YAML Parsing
-- [ ] Parse `action.yml` with `serde_yaml`
+- [x] Parse `action.yml` with `serde_yaml`
 
-- [ ] Define schema structures
+- [x] Define schema structures
   ```rust
   #[derive(Debug, Deserialize)]
   pub struct ActionMetadata {
@@ -287,20 +294,20 @@ Type-safe GitHub Actions workflows in TypeScript - Complete Development Plan
   }
   ```
 
-- [ ] Extract inputs, outputs, runs
+- [x] Extract inputs, outputs, runs
 
-- [ ] Handle YAML parsing errors
+- [x] Handle YAML parsing errors
 
-- [ ] Validate
-  - [ ] Check required fields
-  - [ ] Type validation
+- [x] Validate
+  - [x] Check required fields
+  - [x] Type validation
 
 ---
 
 ## Phase 2: Type Generation
 
 ### 2.1 TypeScript Type Definition Generator
-- [ ] Convert ActionMetadata → TypeScript interface
+- [x] Convert ActionMetadata → TypeScript interface
   ```rust
   // src/generator/types.rs
   pub fn generate_input_interface(
@@ -311,7 +318,7 @@ Type-safe GitHub Actions workflows in TypeScript - Complete Development Plan
   }
   ```
 
-- [ ] Generate JSDoc comments
+- [x] Generate JSDoc comments
   ```typescript
   /**
    * Checkout code from repository
@@ -332,25 +339,25 @@ Type-safe GitHub Actions workflows in TypeScript - Complete Development Plan
   }
   ```
 
-- [ ] Handle optional/required fields
+- [x] Handle optional/required fields
   ```rust
   let optional_marker = if input.required.unwrap_or(false) { "" } else { "?" };
   ```
 
-- [ ] Include default values in JSDoc
+- [x] Include default values in JSDoc
 
-- [ ] Mark deprecated fields
+- [x] Mark deprecated fields
   ```typescript
   /** @deprecated Use 'new-field' instead */
   ```
 
-- [ ] Type inference
-  - [ ] String types
-  - [ ] Detect number types (based on default value)
-  - [ ] Detect boolean types
+- [x] Type inference
+  - [x] String types
+  - [x] Detect number types (based on default value)
+  - [x] Detect boolean types
   - [ ] Union types (optional)
 
-- [ ] Type definition template
+- [x] Type definition template
   ```rust
   // src/generator/templates.rs
   pub const TYPE_DEFINITION_TEMPLATE: &str = r#"
@@ -373,7 +380,7 @@ Type-safe GitHub Actions workflows in TypeScript - Complete Development Plan
   ```
 
 ### 2.2 File System Management
-- [ ] Create `generated/` directory
+- [x] Create `generated/` directory
   ```rust
   pub fn ensure_generated_dir() -> Result<PathBuf> {
       let dir = PathBuf::from("generated");
@@ -382,9 +389,9 @@ Type-safe GitHub Actions workflows in TypeScript - Complete Development Plan
   }
   ```
 
-- [ ] Save type files
-  - [ ] Generate filename: `actions-checkout-v4.d.ts`
-  - [ ] Sanitize filename (handle special characters)
+- [x] Save type files
+  - [x] Generate filename: `actions-checkout-v4.d.ts`
+  - [x] Sanitize filename (handle special characters)
   ```rust
   pub fn action_ref_to_filename(action_ref: &str) -> String {
       action_ref
@@ -395,9 +402,9 @@ Type-safe GitHub Actions workflows in TypeScript - Complete Development Plan
   }
   ```
 
-- [ ] Implement overwrite logic for existing files
+- [x] Implement overwrite logic for existing files
 
-- [ ] Generate index.d.ts (re-export all types)
+- [x] Generate index.d.ts (type declarations) and index.js (runtime)
   ```typescript
   // generated/index.d.ts
   export * from './actions-checkout-v4';
@@ -405,7 +412,7 @@ Type-safe GitHub Actions workflows in TypeScript - Complete Development Plan
   ```
 
 ### 2.3 Type Caching
-- [ ] Design cache structure
+- [x] Design cache structure
   ```rust
   // src/cache.rs
   #[derive(Serialize, Deserialize)]
@@ -422,14 +429,14 @@ Type-safe GitHub Actions workflows in TypeScript - Complete Development Plan
   }
   ```
 
-- [ ] Save to JSON file (`.gaji-cache.json`)
+- [x] Save to JSON file (`.gaji-cache.json`)
 
-- [ ] Store per-action metadata
-  - [ ] Content hash (SHA256 of action.yml)
-  - [ ] Generation timestamp
-  - [ ] Version info
+- [x] Store per-action metadata
+  - [x] Content hash (SHA256 of action.yml)
+  - [x] Generation timestamp
+  - [x] Version info
 
-- [ ] Validate cache
+- [x] Validate cache
   ```rust
   pub fn should_regenerate(&self, action_ref: &str, new_hash: &str) -> bool {
       match self.entries.get(action_ref) {
@@ -439,18 +446,18 @@ Type-safe GitHub Actions workflows in TypeScript - Complete Development Plan
   }
   ```
 
-- [ ] Implement incremental updates
+- [x] Implement incremental updates
 
 - [ ] Cache expiration policy (optional)
   - [ ] Auto re-validate after 7 days
-  - [ ] Force regenerate with `--force` flag
+  - [x] Force regenerate with `--force` flag
 
 ---
 
 ## Phase 3: File Watching
 
 ### 3.1 File System Monitoring
-- [ ] Implement file watching with `notify` crate
+- [x] Implement file watching with `notify` crate
   ```rust
   // src/watcher.rs
   use notify::{Watcher, RecursiveMode, Event, EventKind};
@@ -472,10 +479,10 @@ Type-safe GitHub Actions workflows in TypeScript - Complete Development Plan
   }
   ```
 
-- [ ] Detect `.ts` file changes
-- [ ] Support `.tsx` files as well
-- [ ] Implement recursive directory watching
-- [ ] Add debounce logic (prevent rapid consecutive changes)
+- [x] Detect `.ts` file changes
+- [x] Support `.tsx` files as well
+- [x] Implement recursive directory watching
+- [x] Add debounce logic (300ms debounce)
   ```rust
   use std::time::{Duration, Instant};
   
@@ -489,14 +496,14 @@ Type-safe GitHub Actions workflows in TypeScript - Complete Development Plan
   }
   ```
 
-- [ ] Exclude specific files/directories
-  - [ ] `node_modules/`
-  - [ ] `.git/`
-  - [ ] `generated/`
-  - [ ] `.gaji-cache.json`
+- [x] Exclude specific files/directories
+  - [x] `node_modules/`
+  - [x] `.git/`
+  - [x] `generated/`
+  - [x] `.gaji-cache.json`
 
 ### 3.2 Automatic Type Generation
-- [ ] Auto-analyze on file change
+- [x] Auto-analyze on file change
   ```rust
   async fn handle_file_change(path: &Path) -> Result<()> {
       println!("📝 {} changed", path.display());
@@ -512,9 +519,9 @@ Type-safe GitHub Actions workflows in TypeScript - Complete Development Plan
   }
   ```
 
-- [ ] Generate types only for new action references
-- [ ] Trigger automatic type generation
-- [ ] Show progress
+- [x] Generate types only for new action references
+- [x] Trigger automatic type generation
+- [x] Show progress
   ```rust
   println!("🔍 Found {} new actions", new_refs.len());
   for action_ref in &new_refs {
@@ -524,10 +531,10 @@ Type-safe GitHub Actions workflows in TypeScript - Complete Development Plan
   }
   ```
 
-- [ ] Display success/failure notifications
+- [x] Display success/failure notifications
 
 ### 3.3 Error Handling
-- [ ] Retry on network errors
+- [x] Retry on network errors
   ```rust
   let mut retries = 0;
   const MAX_RETRIES: u32 = 3;
@@ -545,23 +552,23 @@ Type-safe GitHub Actions workflows in TypeScript - Complete Development Plan
   }
   ```
 
-- [ ] Log parsing errors
+- [x] Log parsing errors
 
-- [ ] Provide user-friendly error messages
+- [x] Provide user-friendly error messages
   ```rust
   eprintln!("❌ Failed to generate types for {}", action_ref);
   eprintln!("   Reason: {}", error);
   eprintln!("   Try: gaji clean && gaji generate");
   ```
 
-- [ ] Allow partial failures (continue even if some actions fail)
+- [x] Allow partial failures (continue even if some actions fail)
 
 ---
 
 ## Phase 4: YAML Build System
 
 ### 4.1 Workflow Execution
-- [ ] Check Node.js installation
+- [x] Check Node.js installation (used as fallback via npx tsx)
   ```rust
   fn check_node_installed() -> Result<()> {
       Command::new("node")
@@ -572,11 +579,11 @@ Type-safe GitHub Actions workflows in TypeScript - Complete Development Plan
   }
   ```
 
-- [ ] Verify TypeScript execution environment
-  - [ ] Check `tsx` installation or auto-install
-  - [ ] Or support `ts-node`
+- [x] Verify TypeScript execution environment
+  - [x] Primary: Built-in QuickJS execution (rquickjs) - no Node.js required
+  - [x] Fallback: `npx tsx` or `npx ts-node`
 
-- [ ] Execute TypeScript via subprocess
+- [x] Execute TypeScript via QuickJS (primary) and subprocess (fallback)
   ```rust
   // src/builder.rs
   pub async fn execute_workflow(workflow_path: &Path) -> Result<String> {
@@ -594,18 +601,18 @@ Type-safe GitHub Actions workflows in TypeScript - Complete Development Plan
   }
   ```
 
-- [ ] Serialize workflow object to JSON
+- [x] Serialize workflow object to JSON
   ```typescript
   // User workflow should output like this
   console.log(JSON.stringify(workflow.toYAML()));
   ```
 
-- [ ] Convert JSON → YAML
-- [ ] Capture stdout/stderr
+- [x] Convert JSON → YAML
+- [x] Capture stdout/stderr
 - [ ] Measure execution time
 
 ### 4.2 YAML Validation
-- [ ] Validate generated YAML syntax
+- [x] Validate generated YAML syntax
   ```rust
   pub fn validate_yaml(yaml: &str) -> Result<()> {
       serde_yaml::from_str::<serde_yaml::Value>(yaml)
@@ -614,8 +621,8 @@ Type-safe GitHub Actions workflows in TypeScript - Complete Development Plan
   }
   ```
 
-- [ ] Check GitHub Actions schema compliance
-  - [ ] Verify required fields (`name`, `on`, `jobs`)
+- [x] Check GitHub Actions schema compliance
+  - [x] Verify required fields (`on`, `jobs`)
   - [ ] Only use known fields
 
 - [ ] Warnings and recommendations
@@ -629,7 +636,7 @@ Type-safe GitHub Actions workflows in TypeScript - Complete Development Plan
 - [ ] Lint rules (optional)
 
 ### 4.3 File Output
-- [ ] Create `.github/workflows/` directory
+- [x] Create `.github/workflows/` directory (and `.github/actions/` for composite actions)
   ```rust
   pub fn ensure_workflows_dir() -> Result<PathBuf> {
       let dir = PathBuf::from(".github/workflows");
@@ -638,11 +645,11 @@ Type-safe GitHub Actions workflows in TypeScript - Complete Development Plan
   }
   ```
 
-- [ ] Save YAML file
-  - [ ] Filename: workflow ID + `.yml`
-  - [ ] Format with 2-space indentation
+- [x] Save YAML file
+  - [x] Filename: workflow ID + `.yml`
+  - [x] Format with 2-space indentation
 
-- [ ] Compare with existing file
+- [x] Compare with existing file (skip header lines for comparison)
   ```rust
   pub fn should_write_file(path: &Path, new_content: &str) -> Result<bool> {
       if !path.exists() {
@@ -654,9 +661,9 @@ Type-safe GitHub Actions workflows in TypeScript - Complete Development Plan
   }
   ```
 
-- [ ] Save only when changed (avoid unnecessary git diffs)
+- [x] Save only when changed (avoid unnecessary git diffs)
 
-- [ ] Add comments
+- [x] Add comments
   ```yaml
   # Auto-generated by gaji
   # Do not edit manually - Edit workflows/ci.ts instead
@@ -671,7 +678,7 @@ Type-safe GitHub Actions workflows in TypeScript - Complete Development Plan
 ## Phase 5: init Command (Smart Project Initialization)
 
 ### 5.0 Project State Detection
-- [ ] Implement smart project detection
+- [x] Implement smart project detection
   ```rust
   // src/commands/init.rs
   
@@ -714,7 +721,7 @@ Type-safe GitHub Actions workflows in TypeScript - Complete Development Plan
   }
   ```
 
-- [ ] Main init logic with state handling
+- [x] Main init logic with state handling
   ```rust
   pub async fn init_project(options: InitOptions) -> Result<()> {
       println!("🚀 Initializing gaji project...\n");
@@ -742,7 +749,7 @@ Type-safe GitHub Actions workflows in TypeScript - Complete Development Plan
   ```
 
 ### 5.1 Empty Project Initialization
-- [ ] Create complete new project structure
+- [x] Create complete new project structure
   ```rust
   async fn init_new_project(options: InitOptions) -> Result<()> {
       println!("📦 Creating new project structure...\n");
@@ -776,7 +783,7 @@ Type-safe GitHub Actions workflows in TypeScript - Complete Development Plan
   }
   ```
 
-- [ ] Example workflow template
+- [x] Example workflow template
   ```typescript
   // workflows/ci.ts
   import { Workflow, Job } from 'gaji'
@@ -814,7 +821,7 @@ Type-safe GitHub Actions workflows in TypeScript - Complete Development Plan
     )
   ```
 
-- [ ] package.json template
+- [x] package.json template
   ```json
   {
     "name": "my-project",
@@ -831,8 +838,8 @@ Type-safe GitHub Actions workflows in TypeScript - Complete Development Plan
   }
   ```
 
-### 5.2 Existing Node.js Project Integration
-- [ ] Safe integration with existing projects
+### 5.2 Existing Project Integration
+- [x] Safe integration with existing projects (language-agnostic detection)
   ```rust
   async fn init_in_existing_node_project(options: InitOptions) -> Result<()> {
       println!("📦 Adding gaji to existing project...\n");
@@ -870,7 +877,7 @@ Type-safe GitHub Actions workflows in TypeScript - Complete Development Plan
   }
   ```
 
-- [ ] Smart package.json merging
+- [x] Smart package.json merging (only when package.json exists)
   ```rust
   fn update_package_json() -> Result<()> {
       let content = fs::read_to_string("package.json")?;
@@ -909,7 +916,7 @@ Type-safe GitHub Actions workflows in TypeScript - Complete Development Plan
   }
   ```
 
-- [ ] Handle existing tsconfig.json
+- [x] Handle existing tsconfig.json
   ```rust
   fn handle_tsconfig(options: &InitOptions) -> Result<()> {
       if Path::new("tsconfig.json").exists() {
@@ -929,7 +936,7 @@ Type-safe GitHub Actions workflows in TypeScript - Complete Development Plan
   }
   ```
 
-- [ ] Smart .gitignore updates
+- [x] Smart .gitignore updates (idempotent, append or create)
   ```rust
   fn update_gitignore() -> Result<()> {
       let gitignore_path = Path::new(".gitignore");
@@ -961,7 +968,7 @@ Type-safe GitHub Actions workflows in TypeScript - Complete Development Plan
   ```
 
 ### 5.3 Workflow Migration
-- [ ] Detect existing YAML workflows
+- [x] Detect existing YAML workflows
   ```rust
   async fn init_with_migration(options: InitOptions) -> Result<()> {
       println!("📦 Adding gaji to project with existing workflows...\n");
@@ -1006,7 +1013,7 @@ Type-safe GitHub Actions workflows in TypeScript - Complete Development Plan
   }
   ```
 
-- [ ] YAML to TypeScript migration
+- [x] YAML to TypeScript migration
   ```rust
   async fn migrate_workflows(workflows: &[PathBuf]) -> Result<()> {
       println!("🔄 Migrating workflows to TypeScript...\n");
@@ -1045,7 +1052,7 @@ Type-safe GitHub Actions workflows in TypeScript - Complete Development Plan
   }
   ```
 
-- [ ] Basic YAML to TypeScript converter
+- [x] Basic YAML to TypeScript converter (with backup)
   ```rust
   fn generate_typescript_from_yaml(
       workflow: &serde_yaml::Value,
@@ -1156,7 +1163,7 @@ Type-safe GitHub Actions workflows in TypeScript - Complete Development Plan
   ```
 
 ### 5.4 Interactive Mode
-- [ ] Implement interactive prompts
+- [x] Implement interactive prompts (using dialoguer)
   ```rust
   use dialoguer::{Confirm, MultiSelect, theme::ColorfulTheme};
   
@@ -1223,7 +1230,7 @@ Type-safe GitHub Actions workflows in TypeScript - Complete Development Plan
   ```
 
 ### 5.5 CLI Interface
-- [ ] Add init command with flags
+- [x] Add init command with flags (--force, --skip-examples, --migrate, -i/--interactive)
   ```rust
   // src/cli.rs
   
@@ -1248,7 +1255,7 @@ Type-safe GitHub Actions workflows in TypeScript - Complete Development Plan
   ```
 
 ### 5.6 Configuration File Generation
-- [ ] Generate tsconfig.json
+- [x] Generate tsconfig.json
   ```json
   {
     "compilerOptions": {
@@ -1268,7 +1275,7 @@ Type-safe GitHub Actions workflows in TypeScript - Complete Development Plan
   }
   ```
 
-- [ ] Optional .gaji.toml config file
+- [x] .gaji.toml config file (with .gaji.local.toml for secrets)
   ```toml
   [project]
   workflows_dir = "workflows"
@@ -1285,7 +1292,7 @@ Type-safe GitHub Actions workflows in TypeScript - Complete Development Plan
   ```
 
 ### 5.7 Initial Type Generation
-- [ ] Auto-generate types for example actions
+- [x] Auto-generate types for example actions
   ```rust
   async fn generate_initial_types() -> Result<()> {
       println!("\n🔍 Analyzing workflow files...");
@@ -1317,7 +1324,7 @@ Type-safe GitHub Actions workflows in TypeScript - Complete Development Plan
   ```
 
 ### 5.8 Success Messages and Next Steps
-- [ ] Display appropriate next steps based on project state
+- [x] Display appropriate next steps based on project state
   ```rust
   fn print_next_steps() {
       println!("Next steps:");
@@ -1429,7 +1436,7 @@ Found 3 existing workflow(s):
 ## Phase 6: NPM Package (NPM Wrapper)
 
 ### 6.1 npm Package Structure
-- [ ] Create `gaji-npm/` directory
+- [x] Create `npm/gaji/` directory
   ```
   gaji-npm/
   ├─ package.json
@@ -1441,7 +1448,7 @@ Found 3 existing workflow(s):
   └─ README.md
   ```
 
-- [ ] Write `package.json`
+- [x] Write `package.json`
   ```json
   {
     "name": "gaji",
@@ -1477,14 +1484,14 @@ Found 3 existing workflow(s):
   ```
 
 ### 6.2 Binary Download Script
-- [ ] Implement `install.js`
-  - [ ] Detect platform (OS + arch)
-  - [ ] Download from GitHub Releases
-  - [ ] Show progress
-  - [ ] Grant execute permission (Unix)
-  - [ ] Error handling
+- [x] Implement `postinstall.js`
+  - [x] Detect platform (OS + arch)
+  - [x] Download from GitHub Releases
+  - [x] Show progress
+  - [x] Grant execute permission (Unix)
+  - [x] Error handling
 
-- [ ] Fallback on installation failure
+- [x] Fallback on installation failure
   ```javascript
   console.error('Failed to download binary.');
   console.error('Please install manually:');
@@ -1492,7 +1499,7 @@ Found 3 existing workflow(s):
   ```
 
 ### 6.3 Execution Wrapper
-- [ ] Implement `bin/gaji.js`
+- [x] Implement `bin/gaji.js`
   ```javascript
   #!/usr/bin/env node
   
@@ -1515,7 +1522,7 @@ Found 3 existing workflow(s):
   ```
 
 ### 6.4 TypeScript Runtime Library
-- [ ] `lib/index.js` - Workflow builder classes
+- [x] `lib/index.js` - Workflow builder classes (generated by Rust from templates.rs)
   ```typescript
   // lib/index.ts
   export class Workflow {
@@ -1571,23 +1578,23 @@ Found 3 existing workflow(s):
   }
   ```
 
-- [ ] Create type definition files
-- [ ] Build and bundle
+- [x] Create type definition files (base.d.ts, index.d.ts)
+- [x] Build and bundle
 
-### 6.5 Platform-Specific Packages (Optional)
-- [ ] `@gaji/darwin-x64`
-- [ ] `@gaji/darwin-arm64`
-- [ ] `@gaji/linux-x64`
-- [ ] `@gaji/linux-arm64`
-- [ ] `@gaji/win32-x64`
-- [ ] Configure optionalDependencies
+### 6.5 Platform-Specific Packages
+- [x] `@aspect8/gaji-darwin-x64`
+- [x] `@aspect8/gaji-darwin-arm64`
+- [x] `@aspect8/gaji-linux-x64`
+- [x] `@aspect8/gaji-linux-arm64`
+- [x] `@aspect8/gaji-win32-x64`
+- [x] Configure optionalDependencies
 
 ---
 
 ## Phase 7: CI/CD (Release Automation) - Using gaji itself!
 
 ### 7.1 Write Release Workflow with Our Own Product
-- [ ] Create `workflows/release.ts`
+- [x] Create `workflows/release.ts` (self-dogfooding)
   ```typescript
   // workflows/release.ts
   import { Workflow, Job } from 'gaji'
@@ -1745,7 +1752,7 @@ Found 3 existing workflow(s):
   ```
 
 ### 7.2 Implement Additional Helper Methods
-- [ ] `Job.setStrategy()` method
+- [x] `Job.strategy()` method
   ```typescript
   // lib/index.ts
   export class Job {
@@ -1770,7 +1777,7 @@ Found 3 existing workflow(s):
   }
   ```
 
-- [ ] `Job.setNeeds()` method
+- [x] `Job.needs()` method
   ```typescript
   export class Job {
     needs?: string[];
@@ -1790,7 +1797,7 @@ Found 3 existing workflow(s):
   }
   ```
 
-- [ ] Support `env` in Step
+- [x] Support `env` in Step
   ```typescript
   export interface Step {
     name?: string;
@@ -1804,7 +1811,7 @@ Found 3 existing workflow(s):
   ```
 
 ### 7.3 Write CI Workflow with Our Own Product
-- [ ] Create `workflows/ci.ts` - Regular CI/CD
+- [x] Create `workflows/ci.ts` - Regular CI/CD (self-dogfooding)
   ```typescript
   // workflows/ci.ts
   import { Workflow, Job } from 'gaji'
@@ -2008,58 +2015,63 @@ Found 3 existing workflow(s):
 
 ## Phase 8: Testing (코드 레벨 유닛/통합 테스트)
 
-### 현재 상태 (52 tests)
+### 현재 상태 (90 unit + 3 integration = 93 tests)
 | 모듈 | 테스트 수 | 상태 |
 |------|----------|------|
 | init/mod.rs | 17 | Good |
+| builder.rs | 14 | Good |
+| config.rs | 11 | Good |
 | init/migration.rs | 11 | Good |
 | executor.rs | 7 | Good |
-| parser/mod.rs | 5 | OK |
-| fetcher.rs | 4 | Partial |
+| watcher.rs | 6 | Good |
+| fetcher.rs | 5 | Good |
+| parser/mod.rs | 5 | Good |
+| cache.rs | 5 | Good |
 | generator/types.rs | 3 | Partial |
 | generator/mod.rs | 2 | Minimal |
-| cache.rs | 2 | Minimal |
-| config.rs | 1 | Minimal |
-| **builder.rs** | **0** | **Critical** |
-| **watcher.rs** | **0** | **Critical** |
+| integration.rs | 3 | Good |
 
-### 8.1 builder.rs 유닛 테스트 (~12개)
-- [ ] `json_to_yaml()` - 정상 JSON→YAML 변환
-- [ ] `json_to_yaml()` - 잘못된 JSON 에러 처리
-- [ ] `validate_workflow_yaml()` - 정상 워크플로우 통과
-- [ ] `validate_workflow_yaml()` - `on` 필드 누락 에러
-- [ ] `validate_workflow_yaml()` - `jobs` 필드 누락 에러
-- [ ] `validate_workflow_yaml()` - mapping이 아닌 YAML 에러
-- [ ] `should_write_file()` - 새 파일 (존재하지 않음) → true
-- [ ] `should_write_file()` - 동일 내용 → false
-- [ ] `should_write_file()` - 변경된 내용 → true
-- [ ] `timestamp_now()` - ISO 8601 형식 검증
-- [ ] `find_workflow_files()` - .ts 파일 탐색, .d.ts 제외
-- [ ] `build_all()` - 빈 디렉토리에서 빈 결과
+### 8.1 builder.rs 유닛 테스트
+- [x] `json_to_yaml()` - 정상 JSON→YAML 변환
+- [x] `json_to_yaml()` - 중첩 JSON 변환
+- [x] `json_to_yaml()` - 잘못된 JSON 에러 처리
+- [x] `validate_workflow_yaml()` - 정상 워크플로우 통과
+- [x] `validate_workflow_yaml()` - `on` 필드 누락 에러
+- [x] `validate_workflow_yaml()` - `jobs` 필드 누락 에러
+- [x] `validate_workflow_yaml()` - mapping이 아닌 YAML 에러
+- [x] `validate_workflow_yaml()` - 잘못된 YAML 구문 에러
+- [x] `should_write_file()` - 새 파일 (존재하지 않음) → true
+- [x] `should_write_file()` - 동일 내용 → false
+- [x] `should_write_file()` - 변경된 내용 → true
+- [x] `timestamp_now()` - ISO 8601 형식 검증
+- [x] `find_workflow_files()` - .ts 파일 탐색, .d.ts 제외
+- [x] `build_all()` - 빈 디렉토리에서 빈 결과
+- [x] `copy_node_shell_files()` - node shell 없는 스텝
+- [x] `copy_node_shell_files()` - 잘못된 JSON 처리
 
-### 8.2 watcher.rs 유닛 테스트 (~6개)
-- [ ] `should_process_event()` - .ts Create 이벤트 → true
-- [ ] `should_process_event()` - .tsx Modify 이벤트 → true
-- [ ] `should_process_event()` - .rs 파일 → false
-- [ ] `should_process_event()` - node_modules 내 .ts → false
-- [ ] `should_process_event()` - generated/ 내 .ts → false
-- [ ] `should_process_event()` - Delete 이벤트 → false
+### 8.2 watcher.rs 유닛 테스트 (6개)
+- [x] `should_process_event()` - .ts Create 이벤트 → true
+- [x] `should_process_event()` - .tsx Modify 이벤트 → true
+- [x] `should_process_event()` - .rs 파일 → false
+- [x] `should_process_event()` - node_modules 내 .ts → false
+- [x] `should_process_event()` - generated/ 내 .ts → false
+- [x] `should_process_event()` - Delete 이벤트 → false
 
 ### 8.3 기존 모듈 테스트 보강
-- [ ] cache.rs: `load_or_create()` tempdir 기본값 생성 (+1)
-- [ ] cache.rs: `should_regenerate()` 해시 비교 (+1)
-- [ ] cache.rs: `save()` → `load()` 직렬화 왕복 (+1)
-- [ ] config.rs: TOML 문자열 파싱 (+1)
-- [ ] config.rs: 부분 설정 시 기본값 폴백 (+1)
-- [ ] fetcher.rs: 추가 에러 케이스 (+1)
-- [ ] fetcher.rs: 경로 포함 action ref (+1)
+- [x] cache.rs: `load_or_create()` tempdir 기본값 생성
+- [x] cache.rs: `should_regenerate()` 해시 비교
+- [x] cache.rs: `save()` → `load()` 직렬화 왕복
+- [x] config.rs: TOML 문자열 파싱
+- [x] config.rs: 부분 설정 시 기본값 폴백
+- [x] fetcher.rs: 추가 에러 케이스
+- [x] fetcher.rs: 경로 포함 action ref
 
 ### 8.4 통합 테스트 (`tests/integration.rs`)
-- [ ] builder + executor 파이프라인: TS → QuickJS → JSON → YAML 검증
-- [ ] build_all 다중 출력: 여러 workflow.build() 호출시 다중 YAML
-- [ ] YAML 유효성: 생성된 YAML이 GitHub Actions 스키마 준수
+- [x] builder + executor 파이프라인: TS → QuickJS → JSON → YAML 검증
+- [x] build_all 다중 출력: 여러 workflow.build() 호출시 다중 YAML
+- [x] build_all 빈 디렉토리 처리
 
-**검증**: `cargo test` 전체 통과, 테스트 ~77개+ (현재 52 + 약 25 추가)
+**검증**: `cargo test` 전체 통과, 93개 테스트 (90 unit + 3 integration)
 
 ---
 
@@ -2128,7 +2140,7 @@ Found 3 existing workflow(s):
   - [ ] Add memory cache
   - [ ] LRU cache
 
-- [ ] Optimize binary size
+- [x] Optimize binary size
   ```toml
   [profile.release]
   opt-level = "z"     # Optimize for size
@@ -2155,10 +2167,10 @@ Found 3 existing workflow(s):
   );
   ```
 
-- [ ] Colorful output
+- [x] Colorful output
   ```rust
   use colored::*;
-  
+
   println!("{}", "✓ Success!".green());
   println!("{}", "✗ Error!".red());
   println!("{}", "⚠ Warning!".yellow());
@@ -2181,10 +2193,10 @@ Found 3 existing workflow(s):
   }
   ```
 
-- [ ] Interactive prompts (optional)
+- [x] Interactive prompts (dialoguer)
   ```rust
   use dialoguer::{Confirm, Input, Select};
-  
+
   let confirmed = Confirm::new()
       .with_prompt("Overwrite existing files?")
       .interact()?;
@@ -2199,16 +2211,18 @@ Found 3 existing workflow(s):
   gaji completions fish > ~/.config/fish/completions/gaji.fish
   ```
 
-- [ ] Support configuration file
+- [x] Support configuration file (.gaji.toml + .gaji.local.toml)
   ```toml
   # .gaji.toml
   [project]
   workflows_dir = "workflows"
-  output_dir = ".github/workflows"
-  
+  output_dir = ".github"
+  generated_dir = "generated"
+
   [github]
-  token = "ghp_..."  # optional
-  
+  token = "ghp_..."  # optional (prefer .gaji.local.toml)
+  api_url = "https://github.example.com"  # GitHub Enterprise
+
   [watch]
   debounce_ms = 300
   ```
@@ -2246,18 +2260,18 @@ Found 3 existing workflow(s):
 - [ ] Beta release (v0.9.0)
 
 ### 11.2 Public Release
-- [ ] Deploy to crates.io
+- [x] Deploy to crates.io
   ```bash
   cargo publish
   ```
 
-- [ ] Deploy to npm
+- [x] Deploy to npm
   ```bash
   cd gaji-npm
   npm publish
   ```
 
-- [ ] GitHub Release (v1.0.0)
+- [x] GitHub Releases (v0.1.0 ~ v0.2.5, automated via release-plz)
 
 - [ ] Homebrew formula (optional)
   ```ruby
