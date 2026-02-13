@@ -62,9 +62,12 @@ tests/
 └── integration.rs   # End-to-end builder→executor→YAML pipeline tests
 
 workflows/           # gaji's own CI workflows (self-dogfooding)
+├── audit.ts
 ├── ci.ts
-├── js.ts            # JavaScript action example (hello-world)
-└── new.ts           # CompositeJob example (deploy template)
+├── release-plz.ts
+├── release.ts
+├── update-workflows.ts
+└── vitepress.ts
 
 npm/                 # NPM distribution wrapper
 ├── gaji/            # Main npm package (postinstall downloads binary)
