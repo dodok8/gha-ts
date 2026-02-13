@@ -154,6 +154,86 @@ const job = new Job("ubuntu-latest")
 
 ---
 
+### `JavaScriptAction`
+
+Create Node.js-based GitHub Actions.
+
+```typescript
+class JavaScriptAction {
+  constructor(config: JavaScriptActionConfig, runs: JavaScriptActionRuns)
+  build(filename: string): void
+}
+```
+
+#### `JavaScriptActionConfig`
+
+```typescript
+interface JavaScriptActionConfig {
+  name: string
+  description: string
+  inputs?: Record<string, ActionInputDefinition>
+  outputs?: Record<string, ActionOutputDefinition>
+}
+```
+
+#### `JavaScriptActionRuns`
+
+```typescript
+interface JavaScriptActionRuns {
+  using: 'node12' | 'node16' | 'node20'
+  main: string
+  pre?: string
+  post?: string
+  'pre-if'?: string
+  'post-if'?: string
+}
+```
+
+#### Example
+
+```typescript
+import { JavaScriptAction } from "../generated/index.js";
+
+const action = new JavaScriptAction(
+  {
+    name: "Hello World",
+    description: "Greet someone and record the time",
+    inputs: {
+      "who-to-greet": {
+        description: "Who to greet",
+        required: true,
+        default: "World",
+      },
+    },
+    outputs: {
+      time: {
+        description: "The time we greeted you",
+      },
+    },
+  },
+  {
+    using: "node20",
+    main: "dist/index.js",
+  },
+);
+
+action.build("hello-world");
+```
+
+This generates `.github/actions/hello-world/action.yml`.
+
+Use `CallAction.from()` to reference it in a workflow:
+
+```typescript
+const step = {
+  id: "hello",
+  ...CallAction.from(action).toJSON(),
+  with: { "who-to-greet": "Mona the Octocat" },
+};
+```
+
+---
+
 ### `CompositeJob`
 
 Create reusable job templates.

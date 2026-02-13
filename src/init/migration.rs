@@ -227,7 +227,10 @@ fn generate_step(ts: &mut String, step: &serde_yaml::Value, actions: &[String]) 
             ts.push_str(&format!("        name: \"{}\",\n", escape_js_string(name)));
         }
         if run.contains('\n') {
-            ts.push_str(&format!("        run: `{}`", run.replace('`', "\\`").replace("${", "\\${")));
+            ts.push_str(&format!(
+                "        run: `{}`",
+                run.replace('`', "\\`").replace("${", "\\${")
+            ));
         } else {
             ts.push_str(&format!("        run: \"{}\"", escape_js_string(run)));
         }
@@ -501,8 +504,7 @@ jobs:
 
     #[test]
     fn test_yaml_value_to_js_multiline_string_escapes_dollar_brace() {
-        let val =
-            serde_yaml::Value::String("echo ${{ secrets.TOKEN }}\necho done".to_string());
+        let val = serde_yaml::Value::String("echo ${{ secrets.TOKEN }}\necho done".to_string());
         let result = yaml_value_to_js(&val, 0);
         assert!(
             result.contains("\\${"),

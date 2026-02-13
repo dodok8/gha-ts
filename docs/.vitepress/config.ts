@@ -51,6 +51,10 @@ export default defineConfig({
                   text: "Composite Action",
                   link: "/examples/composite-action",
                 },
+                {
+                  text: "JavaScript Action",
+                  link: "/examples/javascript-action",
+                },
               ],
             },
           ],
@@ -103,6 +107,10 @@ export default defineConfig({
                   text: "컴포지트 액션",
                   link: "/ko/examples/composite-action",
                 },
+                {
+                  text: "JavaScript 액션",
+                  link: "/ko/examples/javascript-action",
+                },
               ],
             },
           ],
@@ -118,7 +126,7 @@ export default defineConfig({
     ],
     footer: {
       message: "Released under the MIT License.",
-      copyright: "Copyright © 2024-present",
+      copyright: "Copyright © 2026-present",
     },
   },
 });

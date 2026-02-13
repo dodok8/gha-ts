@@ -158,6 +158,86 @@ const job = new Job("ubuntu-latest")
 
 ---
 
+### `JavaScriptAction`
+
+Node.js 기반 GitHub Actions를 만듭니다.
+
+```typescript
+class JavaScriptAction {
+  constructor(config: JavaScriptActionConfig, runs: JavaScriptActionRuns)
+  build(filename: string): void
+}
+```
+
+#### `JavaScriptActionConfig`
+
+```typescript
+interface JavaScriptActionConfig {
+  name: string
+  description: string
+  inputs?: Record<string, ActionInputDefinition>
+  outputs?: Record<string, ActionOutputDefinition>
+}
+```
+
+#### `JavaScriptActionRuns`
+
+```typescript
+interface JavaScriptActionRuns {
+  using: 'node12' | 'node16' | 'node20'
+  main: string
+  pre?: string
+  post?: string
+  'pre-if'?: string
+  'post-if'?: string
+}
+```
+
+#### 예제
+
+```typescript
+import { JavaScriptAction } from "../generated/index.js";
+
+const action = new JavaScriptAction(
+  {
+    name: "Hello World",
+    description: "인사하고 시간을 기록합니다",
+    inputs: {
+      "who-to-greet": {
+        description: "인사할 대상",
+        required: true,
+        default: "World",
+      },
+    },
+    outputs: {
+      time: {
+        description: "인사한 시간",
+      },
+    },
+  },
+  {
+    using: "node20",
+    main: "dist/index.js",
+  },
+);
+
+action.build("hello-world");
+```
+
+`.github/actions/hello-world/action.yml`이 생성됩니다.
+
+`CallAction.from()`으로 워크플로우에서 참조할 수 있습니다:
+
+```typescript
+const step = {
+  id: "hello",
+  ...CallAction.from(action).toJSON(),
+  with: { "who-to-greet": "Mona the Octocat" },
+};
+```
+
+---
+
 ### `CompositeJob`
 
 재사용 가능한 작업 템플릿을 만듭니다.
