@@ -12,7 +12,7 @@ if [ -n "${GITHUB_REF:-}" ]; then
   fi
 fi
 
-echo "Syncing version to: $VERSION"
+echo "=== Syncing versions to: $VERSION ==="
 
 # Update main package
 cd npm/gaji
@@ -42,3 +42,13 @@ fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\n');
 done
 
 echo "All versions synced to $VERSION"
+
+# Sync README to npm package
+echo ""
+echo "=== Syncing README ==="
+
+cp README.md npm/gaji/README.md
+echo "  Copied README.md -> npm/gaji/README.md"
+
+echo ""
+echo "All syncs complete!"
