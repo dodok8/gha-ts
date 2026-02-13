@@ -129,6 +129,70 @@ wf2.build("workflow-2");
     }
 }
 
+/// Test CompositeJob: class inheritance to create reusable job templates.
+#[test]
+fn test_composite_job_inheritance() {
+    use gaji::executor;
+
+    let runtime_js = format!(
+        "function getAction(ref) {{ return function(config) {{ if (config === undefined) config = {{}}; var step = {{ uses: ref }}; if (config.name !== undefined) step.name = config.name; return step; }}; }}\n{}",
+        gaji::generator::templates::JOB_WORKFLOW_RUNTIME_TEMPLATE
+    );
+
+    let runtime_stripped = strip_module_syntax(&runtime_js);
+
+    // Simulate TypeScript compiled output: class DeployJob extends CompositeJob
+    let workflow_js = r#"
+var checkout = getAction("actions/checkout@v4");
+
+class DeployJob extends CompositeJob {
+    constructor(environment) {
+        super("ubuntu-latest");
+        this.env({ ENVIRONMENT: environment })
+            .addStep(checkout({ name: "Checkout" }))
+            .addStep({ name: "Deploy", run: "npm run deploy:" + environment });
+    }
+}
+
+var wf = new Workflow({
+    name: "Deploy",
+    on: { push: { tags: ["v*"] } },
+})
+    .addJob("deploy-staging", new DeployJob("staging"))
+    .addJob("deploy-production", new DeployJob("production").needs(["deploy-staging"]));
+
+wf.build("deploy");
+"#;
+
+    let bundled = format!("{}\n\n{}", runtime_stripped, workflow_js);
+
+    let outputs = executor::execute_js(&bundled).unwrap();
+    assert_eq!(outputs.len(), 1);
+    assert_eq!(outputs[0].id, "deploy");
+    assert_eq!(outputs[0].output_type, "workflow");
+
+    let json_value: serde_json::Value = serde_json::from_str(&outputs[0].json).unwrap();
+
+    // Verify staging job
+    let staging = &json_value["jobs"]["deploy-staging"];
+    assert_eq!(staging["runs-on"], "ubuntu-latest");
+    assert_eq!(staging["env"]["ENVIRONMENT"], "staging");
+    assert_eq!(staging["steps"][0]["uses"], "actions/checkout@v4");
+    assert_eq!(staging["steps"][1]["run"], "npm run deploy:staging");
+
+    // Verify production job with needs
+    let production = &json_value["jobs"]["deploy-production"];
+    assert_eq!(production["runs-on"], "ubuntu-latest");
+    assert_eq!(production["env"]["ENVIRONMENT"], "production");
+    assert_eq!(production["needs"][0], "deploy-staging");
+
+    // Convert to YAML and validate
+    let yaml_str = serde_yaml::to_string(&json_value).unwrap();
+    assert!(yaml_str.contains("name: Deploy"));
+    assert!(yaml_str.contains("deploy-staging"));
+    assert!(yaml_str.contains("deploy-production"));
+}
+
 /// Test WorkflowBuilder.build_all with an empty directory.
 #[tokio::test]
 async fn test_build_all_empty_directory() {

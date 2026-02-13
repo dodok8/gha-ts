@@ -201,9 +201,13 @@ export declare class Job {
     toJSON(): JobDefinition;
 }
 
+export declare class CompositeJob extends Job {
+    constructor(runsOn: string | string[], options?: Partial<JobDefinition>);
+}
+
 export declare class Workflow {
     constructor(config: WorkflowConfig);
-    addJob(id: string, job: Job): this;
+    addJob(id: string, job: Job | CompositeJob): this;
     static fromObject(def: WorkflowDefinition, id?: string): Workflow;
     toJSON(): WorkflowDefinition;
     build(id?: string): void;

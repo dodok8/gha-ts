@@ -307,6 +307,12 @@ export class Workflow {
     }
 }
 
+export class CompositeJob extends Job {
+    constructor(runsOn, options) {
+        super(runsOn, options);
+    }
+}
+
 export class CompositeAction {
     constructor(config) {
         this._name = config.name;
