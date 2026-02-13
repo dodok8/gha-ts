@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0](https://github.com/dodok8/gaji/compare/v0.2.8...v0.3.0) - 2026-02-13
+
+### Added
+
+- add build timing, progress bars, and cache expiration policy ([#32](https://github.com/dodok8/gaji/pull/32))
+
+### Other
+
+- change npx
+
 ## [0.2.8](https://github.com/dodok8/gaji/compare/v0.2.7...v0.2.8) - 2026-02-13
 
 ### Fixed
