@@ -141,6 +141,34 @@ export interface WorkflowConfig {
 export interface WorkflowDefinition extends WorkflowConfig {
     jobs: Record<string, JobDefinition>;
 }
+
+export interface ActionInputDefinition {
+    description?: string;
+    required?: boolean;
+    default?: string;
+    'deprecation-message'?: string;
+}
+
+export interface ActionOutputDefinition {
+    description?: string;
+    value?: string;
+}
+
+export interface JavaScriptActionConfig {
+    name: string;
+    description: string;
+    inputs?: Record<string, ActionInputDefinition>;
+    outputs?: Record<string, ActionOutputDefinition>;
+}
+
+export interface JavaScriptActionRuns {
+    using: 'node12' | 'node16' | 'node20';
+    main: string;
+    pre?: string;
+    post?: string;
+    'pre-if'?: string;
+    'post-if'?: string;
+}
 "#;
 
 pub const GET_ACTION_BASE_RUNTIME_TEMPLATE: &str = r#"
@@ -354,6 +382,49 @@ export class CallAction {
 
     toJSON() {
         return { uses: this._uses };
+    }
+}
+
+export class JavaScriptAction {
+    constructor(config, runs) {
+        this._name = config.name;
+        this._description = config.description;
+        this._inputs = config.inputs;
+        this._outputs = config.outputs;
+        this._using = runs.using;
+        this._main = runs.main;
+        this._pre = runs.pre;
+        this._post = runs.post;
+        this._preIf = runs["pre-if"];
+        this._postIf = runs["post-if"];
+        this._buildId = undefined;
+    }
+
+    toJSON() {
+        var obj = {
+            name: this._name,
+            description: this._description,
+            runs: {
+                using: this._using,
+                main: this._main,
+            }
+        };
+        if (this._inputs !== undefined) obj.inputs = this._inputs;
+        if (this._outputs !== undefined) obj.outputs = this._outputs;
+        if (this._pre !== undefined) obj.runs.pre = this._pre;
+        if (this._post !== undefined) obj.runs.post = this._post;
+        if (this._preIf !== undefined) obj.runs["pre-if"] = this._preIf;
+        if (this._postIf !== undefined) obj.runs["post-if"] = this._postIf;
+        return obj;
+    }
+
+    build(id) {
+        this._buildId = id || "action";
+        if (typeof __gha_build !== "undefined") {
+            __gha_build(this._buildId, JSON.stringify(this), "action");
+        } else {
+            console.log(JSON.stringify(this, null, 2));
+        }
     }
 }
 "#;
