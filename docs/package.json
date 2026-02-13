@@ -1,0 +1,14 @@
+{
+  "name": "gaji-docs",
+  "version": "1.0.0",
+  "description": "Documentation for gaji - Type-safe GitHub Actions workflows in TypeScript",
+  "type": "module",
+  "scripts": {
+    "docs:dev": "vitepress dev",
+    "docs:build": "vitepress build",
+    "docs:preview": "vitepress preview"
+  },
+  "devDependencies": {
+    "vitepress": "^2.0.0-alpha.16"
+  }
+}

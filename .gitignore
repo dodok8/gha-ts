@@ -25,6 +25,11 @@ dist/
 # npm platform binaries (populated by CI)
 npm/platform-*/bin/
 
+# VitePress
+docs/.vitepress/cache
+docs/.vitepress/dist
+docs/node_modules/
+
 # Test artifacts
 *.log
 coverage/
