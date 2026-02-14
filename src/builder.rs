@@ -3,6 +3,7 @@ use std::process::Command;
 
 use anyhow::{Context, Result};
 use colored::Colorize;
+use ignore::gitignore::{Gitignore, GitignoreBuilder};
 use indicatif::{ProgressBar, ProgressStyle};
 use tokio::fs;
 
@@ -12,14 +13,52 @@ pub struct WorkflowBuilder {
     input_dir: PathBuf,
     output_dir: PathBuf,
     dry_run: bool,
+    gitignore: Gitignore,
+}
+
+/// Build a gitignore matcher from the project root.
+/// This respects .gitignore files and also adds gaji-specific patterns.
+fn build_gitignore(root: &Path) -> Gitignore {
+    let mut builder = GitignoreBuilder::new(root);
+
+    // Load .gitignore if it exists
+    let gitignore_path = root.join(".gitignore");
+    if gitignore_path.exists() {
+        let _ = builder.add(&gitignore_path);
+    }
+
+    // Add gaji-specific patterns that should always be ignored
+    let _ = builder.add_line(None, "node_modules/");
+    let _ = builder.add_line(None, "generated/");
+    let _ = builder.add_line(None, ".gaji-cache.json");
+
+    builder
+        .build()
+        .unwrap_or_else(|_| GitignoreBuilder::new(root).build().unwrap())
 }
 
 impl WorkflowBuilder {
     pub fn new(input_dir: PathBuf, output_dir: PathBuf, dry_run: bool) -> Self {
+        // Build gitignore from project root (current working directory)
+        let root = std::env::current_dir().unwrap_or_else(|_| input_dir.clone());
+        Self::with_root(input_dir, output_dir, dry_run, root)
+    }
+
+    /// Create a WorkflowBuilder with an explicit root directory for gitignore matching.
+    /// This is useful for testing or when the project root differs from the current directory.
+    pub fn with_root(
+        input_dir: PathBuf,
+        output_dir: PathBuf,
+        dry_run: bool,
+        root: PathBuf,
+    ) -> Self {
+        let gitignore = build_gitignore(&root);
+
         Self {
             input_dir,
             output_dir,
             dry_run,
+            gitignore,
         }
     }
 
@@ -83,8 +122,16 @@ impl WorkflowBuilder {
         while let Some(entry) = entries.next_entry().await? {
             let path = entry.path();
             if let Some(ext) = path.extension() {
+                // Check for .ts files that are not .d.ts
                 if ext == "ts" && !path.to_string_lossy().contains(".d.ts") {
-                    files.push(path);
+                    // Check if path or any of its parents is ignored by .gitignore
+                    if !self
+                        .gitignore
+                        .matched_path_or_any_parents(&path, false)
+                        .is_ignore()
+                    {
+                        files.push(path);
+                    }
                 }
             }
         }
@@ -593,8 +640,12 @@ mod tests {
             .await
             .unwrap();
 
-        let builder =
-            WorkflowBuilder::new(dir.path().to_path_buf(), dir.path().join("output"), false);
+        let builder = WorkflowBuilder::with_root(
+            dir.path().to_path_buf(),
+            dir.path().join("output"),
+            false,
+            dir.path().to_path_buf(),
+        );
         let files = builder.find_workflow_files().await.unwrap();
 
         assert_eq!(files.len(), 2);
@@ -612,8 +663,12 @@ mod tests {
     #[tokio::test]
     async fn test_build_all_empty_dir() {
         let dir = TempDir::new().unwrap();
-        let builder =
-            WorkflowBuilder::new(dir.path().to_path_buf(), dir.path().join("output"), false);
+        let builder = WorkflowBuilder::with_root(
+            dir.path().to_path_buf(),
+            dir.path().join("output"),
+            false,
+            dir.path().to_path_buf(),
+        );
         let result = builder.build_all().await.unwrap();
         assert!(result.is_empty());
     }
