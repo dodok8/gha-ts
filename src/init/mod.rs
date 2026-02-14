@@ -191,7 +191,7 @@ async fn create_directories(root: &Path) -> Result<()> {
     Ok(())
 }
 
-async fn update_package_json(root: &Path) -> Result<()> {
+pub(crate) async fn update_package_json(root: &Path) -> Result<()> {
     let path = root.join("package.json");
     let content = fs::read_to_string(&path)
         .await
@@ -234,7 +234,7 @@ async fn update_package_json(root: &Path) -> Result<()> {
     Ok(())
 }
 
-async fn handle_tsconfig(root: &Path, options: &InitOptions) -> Result<()> {
+pub(crate) async fn handle_tsconfig(root: &Path, options: &InitOptions) -> Result<()> {
     let path = root.join("tsconfig.json");
 
     if path.exists() {
@@ -264,7 +264,7 @@ async fn handle_tsconfig(root: &Path, options: &InitOptions) -> Result<()> {
     Ok(())
 }
 
-async fn ensure_gitignore(root: &Path, may_exist: bool) -> Result<()> {
+pub(crate) async fn ensure_gitignore(root: &Path, may_exist: bool) -> Result<()> {
     let path = root.join(".gitignore");
 
     if may_exist && path.exists() {
@@ -310,7 +310,7 @@ fn create_config(root: &Path) -> Result<()> {
     Ok(())
 }
 
-async fn try_generate_initial_types(root: &Path) {
+pub(crate) async fn try_generate_initial_types(root: &Path) {
     match generate_initial_types(root).await {
         Ok(()) => {}
         Err(e) => {
@@ -357,7 +357,7 @@ async fn generate_initial_types(root: &Path) -> Result<()> {
     Ok(())
 }
 
-fn print_next_steps() {
+pub(crate) fn print_next_steps() {
     println!("Next steps:");
     println!("  1. Edit workflows/*.ts");
     println!("  2. Run: gaji dev");

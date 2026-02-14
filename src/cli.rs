@@ -69,4 +69,10 @@ pub enum Commands {
         #[arg(long)]
         cache: bool,
     },
+
+    /// Generate shell completions
+    Completions {
+        /// Shell type (bash, zsh, fish, powershell, elvish)
+        shell: String,
+    },
 }

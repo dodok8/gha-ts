@@ -1,8 +1,10 @@
+use std::io;
 use std::path::PathBuf;
 use std::time::Instant;
 
 use anyhow::Result;
-use clap::Parser;
+use clap::{CommandFactory, Parser};
+use clap_complete::{generate, Shell};
 use colored::Colorize;
 
 use gaji::builder::WorkflowBuilder;
@@ -42,6 +44,9 @@ async fn main() -> Result<()> {
         }
         Commands::Clean { cache } => {
             cmd_clean(cache).await?;
+        }
+        Commands::Completions { shell } => {
+            cmd_completions(&shell)?;
         }
     }
 
@@ -202,6 +207,20 @@ async fn cmd_clean(clean_cache: bool) -> Result<()> {
     }
 
     println!("\n{} Clean complete!", "✨".green());
+
+    Ok(())
+}
+
+fn cmd_completions(shell_str: &str) -> Result<()> {
+    let shell = shell_str.parse::<Shell>().map_err(|_| {
+        anyhow::anyhow!(
+            "Invalid shell: '{}'. Supported shells: bash, zsh, fish, powershell, elvish",
+            shell_str
+        )
+    })?;
+
+    let mut cmd = Cli::command();
+    generate(shell, &mut cmd, "gaji", &mut io::stdout());
 
     Ok(())
 }

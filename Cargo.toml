@@ -10,7 +10,8 @@ categories = ["development-tools", "command-line-utilities"]
 
 [dependencies]
 anyhow = "1.0.101"
-clap = { version = "4.5.58", features = ["derive"] }
+clap = { version = "4.5.58", features = ["derive", "suggestions"] }
+clap_complete = "4.5.66"
 colored = "3.1.1"
 dialoguer = "0.11"
 indicatif = "0.18.3"
