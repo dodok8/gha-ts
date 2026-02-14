@@ -84,15 +84,25 @@ File watching settings:
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
 | `debounce_ms` | integer | `300` | Debounce delay in milliseconds |
-| `ignored_patterns` | array | `["node_modules", ".git", "generated"]` | Patterns to ignore during watch |
+| `ignored_patterns` | array | `["node_modules", ".git", "generated"]` | Patterns to ignore |
+
+The `ignored_patterns` setting is used by both `gaji dev` (watch mode) and `gaji build` commands. Files matching any of these patterns will be excluded from processing. The matching uses simple substring matching - if any pattern appears anywhere in the file path, the file is ignored.
 
 **Example:**
 
 ```toml
 [watch]
 debounce_ms = 500
-ignored_patterns = ["node_modules", ".git", "dist", "coverage"]
+ignored_patterns = ["node_modules", ".git", "generated", "dist", "coverage"]
 ```
+
+**Common patterns to ignore:**
+
+- `node_modules` - npm dependencies
+- `.git` - Git internals
+- `generated` - gaji-generated type files
+- `dist` - build output directories
+- `coverage` - test coverage reports
 
 ### `[build]`
 

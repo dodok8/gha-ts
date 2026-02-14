@@ -17,6 +17,10 @@ pub async fn watch_directory(dir: &Path) -> Result<()> {
     println!("{} Watching {} for changes...", "👀".green(), dir.display());
     println!("{}", "Press Ctrl+C to stop".dimmed());
 
+    // Load ignored patterns from config
+    let gaji_config = GajiConfig::load()?;
+    let ignored_patterns = gaji_config.watch.ignored_patterns.clone();
+
     let (tx, rx) = channel();
 
     let mut watcher = RecommendedWatcher::new(tx, Config::default())?;
@@ -35,7 +39,7 @@ pub async fn watch_directory(dir: &Path) -> Result<()> {
                 }
                 last_event = Some(Instant::now());
 
-                if should_process_event(&event) {
+                if should_process_event(&event, &ignored_patterns) {
                     if let Err(e) = handle_event(&event).await {
                         eprintln!("{} Error handling event: {}", "❌".red(), e);
                     }
@@ -50,23 +54,24 @@ pub async fn watch_directory(dir: &Path) -> Result<()> {
     Ok(())
 }
 
-fn should_process_event(event: &Event) -> bool {
+fn should_process_event(event: &Event, ignored_patterns: &[String]) -> bool {
     // Only process create and modify events
     match event.kind {
         EventKind::Create(_) | EventKind::Modify(_) => {}
         _ => return false,
     }
 
-    // Only process .ts and .tsx files
+    // Only process .ts and .tsx files that are not ignored
     for path in &event.paths {
         if let Some(ext) = path.extension() {
             if ext == "ts" || ext == "tsx" {
-                // Exclude generated files and node_modules
+                // Check if path contains any ignored pattern
                 let path_str = path.to_string_lossy();
-                if !path_str.contains("node_modules")
-                    && !path_str.contains("generated")
-                    && !path_str.contains(".gaji-cache")
-                {
+                let is_ignored = ignored_patterns
+                    .iter()
+                    .any(|pattern| path_str.contains(pattern));
+
+                if !is_ignored {
                     return true;
                 }
             }
@@ -176,61 +181,114 @@ mod tests {
 
     #[test]
     fn test_should_process_ts_create() {
+        let ignored = vec![];
         let event = make_event(
             EventKind::Create(CreateKind::File),
             vec![PathBuf::from("/project/workflows/ci.ts")],
         );
-        assert!(should_process_event(&event));
+        assert!(should_process_event(&event, &ignored));
     }
 
     #[test]
     fn test_should_process_tsx_modify() {
+        let ignored = vec![];
         let event = make_event(
             EventKind::Modify(ModifyKind::Data(notify::event::DataChange::Content)),
             vec![PathBuf::from("/project/workflows/component.tsx")],
         );
-        assert!(should_process_event(&event));
+        assert!(should_process_event(&event, &ignored));
     }
 
     #[test]
     fn test_should_ignore_non_ts() {
+        let ignored = vec![];
         let event = make_event(
             EventKind::Create(CreateKind::File),
             vec![PathBuf::from("/project/src/main.rs")],
         );
-        assert!(!should_process_event(&event));
+        assert!(!should_process_event(&event, &ignored));
 
         let event_json = make_event(
             EventKind::Modify(ModifyKind::Data(notify::event::DataChange::Content)),
             vec![PathBuf::from("/project/config.json")],
         );
-        assert!(!should_process_event(&event_json));
+        assert!(!should_process_event(&event_json, &ignored));
     }
 
     #[test]
     fn test_should_ignore_node_modules() {
+        let ignored = vec!["node_modules".to_string()];
         let event = make_event(
             EventKind::Create(CreateKind::File),
             vec![PathBuf::from("/project/node_modules/pkg/index.ts")],
         );
-        assert!(!should_process_event(&event));
+        assert!(!should_process_event(&event, &ignored));
     }
 
     #[test]
     fn test_should_ignore_generated() {
+        let ignored = vec!["generated".to_string()];
         let event = make_event(
             EventKind::Create(CreateKind::File),
             vec![PathBuf::from("/project/generated/types.ts")],
         );
-        assert!(!should_process_event(&event));
+        assert!(!should_process_event(&event, &ignored));
     }
 
     #[test]
     fn test_should_ignore_delete_event() {
+        let ignored = vec![];
         let event = make_event(
             EventKind::Remove(RemoveKind::File),
             vec![PathBuf::from("/project/workflows/ci.ts")],
         );
-        assert!(!should_process_event(&event));
+        assert!(!should_process_event(&event, &ignored));
+    }
+
+    #[test]
+    fn test_should_ignore_custom_pattern() {
+        let ignored = vec!["dist".to_string(), ".cache".to_string()];
+
+        // dist/ should be ignored
+        let event_dist = make_event(
+            EventKind::Create(CreateKind::File),
+            vec![PathBuf::from("/project/dist/bundle.ts")],
+        );
+        assert!(!should_process_event(&event_dist, &ignored));
+
+        // .cache should be ignored
+        let event_cache = make_event(
+            EventKind::Create(CreateKind::File),
+            vec![PathBuf::from("/project/.cache/types.ts")],
+        );
+        assert!(!should_process_event(&event_cache, &ignored));
+    }
+
+    #[test]
+    fn test_default_ignored_patterns() {
+        // Test with default patterns from WatchConfig
+        let default_ignored = vec![
+            "node_modules".to_string(),
+            ".git".to_string(),
+            "generated".to_string(),
+        ];
+
+        let event_node = make_event(
+            EventKind::Create(CreateKind::File),
+            vec![PathBuf::from("/project/node_modules/pkg/index.ts")],
+        );
+        assert!(!should_process_event(&event_node, &default_ignored));
+
+        let event_git = make_event(
+            EventKind::Create(CreateKind::File),
+            vec![PathBuf::from("/project/.git/hooks/pre-commit.ts")],
+        );
+        assert!(!should_process_event(&event_git, &default_ignored));
+
+        let event_generated = make_event(
+            EventKind::Create(CreateKind::File),
+            vec![PathBuf::from("/project/generated/types.ts")],
+        );
+        assert!(!should_process_event(&event_generated, &default_ignored));
     }
 }

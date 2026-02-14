@@ -6,20 +6,42 @@ use colored::Colorize;
 use indicatif::{ProgressBar, ProgressStyle};
 use tokio::fs;
 
+use crate::config::Config as GajiConfig;
 use crate::executor;
 
 pub struct WorkflowBuilder {
     input_dir: PathBuf,
     output_dir: PathBuf,
     dry_run: bool,
+    ignored_patterns: Vec<String>,
+}
+
+fn default_ignored_patterns() -> Vec<String> {
+    vec![
+        "node_modules".to_string(),
+        ".git".to_string(),
+        "generated".to_string(),
+    ]
 }
 
 impl WorkflowBuilder {
     pub fn new(input_dir: PathBuf, output_dir: PathBuf, dry_run: bool) -> Self {
+        let ignored_patterns = GajiConfig::load().map_or_else(
+            |_| default_ignored_patterns(),
+            |config| {
+                if config.watch.ignored_patterns.is_empty() {
+                    default_ignored_patterns()
+                } else {
+                    config.watch.ignored_patterns
+                }
+            },
+        );
+
         Self {
             input_dir,
             output_dir,
             dry_run,
+            ignored_patterns,
         }
     }
 
@@ -84,7 +106,16 @@ impl WorkflowBuilder {
             let path = entry.path();
             if let Some(ext) = path.extension() {
                 if ext == "ts" && !path.to_string_lossy().contains(".d.ts") {
-                    files.push(path);
+                    // Check if path contains any ignored pattern
+                    let path_str = path.to_string_lossy();
+                    let is_ignored = self
+                        .ignored_patterns
+                        .iter()
+                        .any(|pattern| path_str.contains(pattern));
+
+                    if !is_ignored {
+                        files.push(path);
+                    }
                 }
             }
         }
@@ -605,6 +636,42 @@ mod tests {
         assert!(filenames.contains(&"ci.ts".to_string()));
         assert!(filenames.contains(&"release.ts".to_string()));
         assert!(!filenames.iter().any(|f| f.contains(".d.ts")));
+    }
+
+    #[tokio::test]
+    async fn test_find_workflow_files_respects_ignored_patterns() {
+        let dir = TempDir::new().unwrap();
+
+        // Create a workflow file (normal)
+        tokio::fs::write(dir.path().join("ci.ts"), "// workflow")
+            .await
+            .unwrap();
+
+        // Create a workflow file with "node_modules" in the path name (simulating ignored pattern)
+        // Note: ignored_patterns uses simple string contains matching
+        tokio::fs::write(
+            dir.path().join("node_modules_test.ts"),
+            "// should be ignored",
+        )
+        .await
+        .unwrap();
+
+        let mut builder =
+            WorkflowBuilder::new(dir.path().to_path_buf(), dir.path().join("output"), false);
+
+        // Override ignored_patterns for testing
+        builder.ignored_patterns = vec!["node_modules".to_string()];
+
+        let files = builder.find_workflow_files().await.unwrap();
+
+        // Should only include ci.ts, not node_modules_test.ts
+        assert_eq!(files.len(), 1);
+        let filenames: Vec<String> = files
+            .iter()
+            .map(|p| p.file_name().unwrap().to_string_lossy().to_string())
+            .collect();
+        assert!(filenames.contains(&"ci.ts".to_string()));
+        assert!(!filenames.contains(&"node_modules_test.ts".to_string()));
     }
 
     // --- build_all tests ---

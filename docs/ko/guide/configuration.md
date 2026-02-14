@@ -84,7 +84,9 @@ api_url = "https://github.example.com"
 | 옵션 | 타입 | 기본값 | 설명 |
 |------|------|--------|------|
 | `debounce_ms` | integer | `300` | 밀리초 단위 디바운스 지연 |
-| `ignored_patterns` | array | `["node_modules", ".git", "generated"]` | 감시 중 무시할 패턴 |
+| `ignored_patterns` | array | `["node_modules", ".git", "generated"]` | 무시할 패턴 |
+
+`ignored_patterns` 설정은 `gaji dev` (watch 모드)와 `gaji build` 명령어 모두에서 사용됩니다. 이 패턴과 일치하는 파일은 처리에서 제외됩니다. 매칭은 단순 문자열 포함 여부로 판단됩니다 - 파일 경로에 패턴이 포함되어 있으면 해당 파일은 무시됩니다.
 
 **예제:**
 
@@ -93,6 +95,14 @@ api_url = "https://github.example.com"
 debounce_ms = 500
 ignored_patterns = ["node_modules", ".git", "generated", "dist", "coverage"]
 ```
+
+**일반적으로 무시하는 패턴:**
+
+- `node_modules` - npm 의존성
+- `.git` - Git 내부 파일
+- `generated` - gaji가 생성한 타입 파일
+- `dist` - 빌드 출력 디렉토리
+- `coverage` - 테스트 커버리지 리포트
 
 ### `[build]`
 
