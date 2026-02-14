@@ -180,7 +180,7 @@ mod tests {
 
         let result = generate_type_definition("actions/checkout@v5", &metadata);
 
-        assert!(result.contains("ActionsCheckoutV4Inputs"));
+        assert!(result.contains("ActionsCheckoutV5Inputs"));
         assert!(result.contains("repository?:"));
         assert!(result.contains("@default"));
     }

@@ -317,7 +317,7 @@ pub fn action_ref_to_filename(action_ref: &str) -> String {
 }
 
 pub fn action_ref_to_interface_name(action_ref: &str) -> String {
-    // "actions/checkout@v5" -> "ActionsCheckoutV4"
+    // "actions/checkout@v5" -> "ActionsCheckoutV5"
     action_ref
         .split(['/', '@', '-', '.'])
         .filter(|s| !s.is_empty())
@@ -351,7 +351,7 @@ mod tests {
     fn test_action_ref_to_filename() {
         assert_eq!(
             action_ref_to_filename("actions/checkout@v5"),
-            "actions-checkout-v4.d.ts"
+            "actions-checkout-v5.d.ts"
         );
         assert_eq!(
             action_ref_to_filename("owner/repo/path@main"),
@@ -363,7 +363,7 @@ mod tests {
     fn test_action_ref_to_interface_name() {
         assert_eq!(
             action_ref_to_interface_name("actions/checkout@v5"),
-            "ActionsCheckoutV4"
+            "ActionsCheckoutV5"
         );
         assert_eq!(
             action_ref_to_interface_name("actions/setup-node@v4"),
