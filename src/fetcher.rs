@@ -1,6 +1,7 @@
 use anyhow::{Context, Result};
+use futures::stream::{self, StreamExt};
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::time::Duration;
 
 use crate::cache::Cache;
@@ -202,6 +203,22 @@ impl GitHubFetcher {
         self.cache.set(action_ref_str, &metadata, &yaml_content)?;
 
         Ok(metadata)
+    }
+
+    /// Fetch multiple action metadata in parallel with concurrency limit
+    pub async fn fetch_action_metadata_batch(
+        &self,
+        action_refs: &HashSet<String>,
+        concurrency: usize,
+    ) -> Vec<(String, Result<ActionMetadata>)> {
+        stream::iter(action_refs.iter())
+            .map(|action_ref| async move {
+                let result = self.fetch_action_metadata(action_ref).await;
+                (action_ref.clone(), result)
+            })
+            .buffer_unordered(concurrency)
+            .collect()
+            .await
     }
 
     async fn fetch_action_yaml(&self, action_ref: &ActionRef) -> Result<String> {

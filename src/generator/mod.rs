@@ -63,17 +63,37 @@ impl TypeGenerator {
                 .unwrap()
                 .progress_chars("━━─"),
         );
+        pb.set_message("fetching action metadata...");
 
-        for action_ref in action_refs {
-            pb.set_message(action_ref.clone());
-            match self.generate_type_for_ref(action_ref).await {
-                Ok((path, info)) => {
-                    generated_files.push(path);
-                    action_infos.push(info);
+        // Fetch all action metadata in parallel (max 10 concurrent requests)
+        let fetch_results = self
+            .fetcher
+            .fetch_action_metadata_batch(action_refs, 10)
+            .await;
+
+        pb.set_message("generating types...");
+
+        for (action_ref, result) in fetch_results {
+            match result {
+                Ok(metadata) => {
+                    match self
+                        .generate_type_from_metadata(&action_ref, &metadata)
+                        .await
+                    {
+                        Ok((path, info)) => {
+                            generated_files.push(path);
+                            action_infos.push(info);
+                        }
+                        Err(e) => {
+                            pb.suspend(|| {
+                                eprintln!("Failed to generate types for {}: {}", action_ref, e);
+                            });
+                        }
+                    }
                 }
                 Err(e) => {
                     pb.suspend(|| {
-                        eprintln!("Failed to generate types for {}: {}", action_ref, e);
+                        eprintln!("Failed to fetch metadata for {}: {}", action_ref, e);
                     });
                 }
             }
@@ -104,9 +124,12 @@ impl TypeGenerator {
         Ok(file_path)
     }
 
-    async fn generate_type_for_ref(&self, action_ref: &str) -> Result<(PathBuf, ActionTypeInfo)> {
-        let metadata = self.fetcher.fetch_action_metadata(action_ref).await?;
-        let type_def = generate_type_definition(action_ref, &metadata);
+    async fn generate_type_from_metadata(
+        &self,
+        action_ref: &str,
+        metadata: &crate::fetcher::ActionMetadata,
+    ) -> Result<(PathBuf, ActionTypeInfo)> {
+        let type_def = generate_type_definition(action_ref, metadata);
 
         let interface_name = action_ref_to_interface_name(action_ref);
         let module_name = action_ref_to_module_name(action_ref);
