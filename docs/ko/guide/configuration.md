@@ -145,6 +145,29 @@ generated/
 
 **참고:** `.github/workflows/`는 무시하지 마세요. 이것은 GitHub Actions가 실제로 사용하는 워크플로우 파일입니다.
 
+### 자동 `.gitignore` 지원
+
+gaji는 파일 감시 및 워크플로우 탐색 시 프로젝트의 `.gitignore` 파일을 자동으로 존중합니다:
+
+- `.gitignore` 패턴과 일치하는 파일은 파일 감시에서 자동으로 제외됩니다
+- 무시된 디렉토리의 워크플로우 파일은 처리되지 않습니다
+- `.gitignore`에 추가하는 사용자 정의 패턴이 자동으로 적용됩니다
+
+**기본 무시 패턴** (`.gitignore` 파일이 없어도 적용):
+
+- `node_modules/`
+- `generated/`
+- `.gaji-cache.json`
+
+이를 통해 표준 `.gitignore` 패턴을 사용하여 gaji 처리에서 파일을 제외할 수 있습니다:
+
+```gitignore
+# 빌드 결과물을 gaji 감시에서 제외
+dist/
+build/
+*.generated.ts
+```
+
 ## 캐시
 
 gaji는 액션 정의를 다시 가져오지 않도록 캐시 파일(`.gaji-cache.json`)을 사용합니다. 이 파일은 자동으로 관리되며 gitignore에 추가해야 합니다.

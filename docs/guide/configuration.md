@@ -145,6 +145,28 @@ generated/
 
 **Note:** Do NOT ignore `.github/workflows/` since those are the actual workflow files GitHub Actions uses.
 
+### Automatic `.gitignore` Support
+
+gaji automatically respects your project's `.gitignore` file when watching files and discovering workflows. This means:
+
+- Files matching patterns in `.gitignore` are automatically excluded from file watching
+- Workflow files in ignored directories won't be processed
+- Custom ignore patterns you add to `.gitignore` are automatically applied
+
+**Default ignored patterns** (applied even without a `.gitignore` file):
+- `node_modules/`
+- `generated/`
+- `.gaji-cache.json`
+
+This allows you to use standard `.gitignore` patterns to exclude files from gaji's processing, such as:
+
+```gitignore
+# Exclude build artifacts from gaji watching
+dist/
+build/
+*.generated.ts
+```
+
 ## Cache
 
 gaji uses a cache file (`.gaji-cache.json`) to avoid re-fetching action definitions. This file is automatically managed and should be gitignored.
