@@ -65,7 +65,7 @@ gaji is a working CLI tool with all core features implemented. It is self-dogfoo
 ## Remaining Work
 
 ### Polish & Quality
-- [ ] Parallel action.yml downloads (futures::stream::buffer_unordered)
+- [x] Parallel action.yml downloads (futures::stream::buffer_unordered)
 - [x] Better error messages with suggestions ("Did you mean...?")
 
 ### Documentation Gaps (implemented but undocumented)
@@ -80,7 +80,7 @@ gaji is a working CLI tool with all core features implemented. It is self-dogfoo
 - [x] Shell completion scripts (bash, zsh, fish via clap)
 
 ### Feature
-- [ ] Action migration (`action.yml` → TypeScript using CompositeAction/JavaScriptAction)
+- [x] Action migration (`action.yml` → TypeScript using CompositeAction/JavaScriptAction)
 
 ### Community
 - [x] GitHub issue templates (bug report, feature request)

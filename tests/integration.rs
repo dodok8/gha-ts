@@ -193,6 +193,125 @@ wf.build("deploy");
     assert!(yaml_str.contains("deploy-production"));
 }
 
+/// Test CompositeAction migration roundtrip: TypeScript -> QuickJS -> JSON -> YAML.
+#[test]
+fn test_composite_action_migration_roundtrip() {
+    use gaji::executor;
+
+    let runtime_js = format!(
+        r#"function getAction(ref) {{
+    return function(config) {{
+        if (config === undefined) config = {{}};
+        var step = {{ uses: ref }};
+        if (config.name !== undefined) step.name = config.name;
+        if (config.with !== undefined) step.with = config.with;
+        return step;
+    }};
+}}
+{}"#,
+        gaji::generator::templates::JOB_WORKFLOW_RUNTIME_TEMPLATE
+    );
+
+    let runtime_stripped = strip_module_syntax(&runtime_js);
+
+    // Simulate migrated CompositeAction TypeScript (what generate_composite_action_ts would produce)
+    let action_js = r#"
+var checkout = getAction("actions/checkout@v5");
+
+var action = new CompositeAction({
+    name: "Setup Environment",
+    description: "Sets up the build environment",
+    inputs: {
+        "node-version": {
+            description: "Node.js version to use",
+            required: false,
+            default: "20",
+        },
+    },
+});
+
+action
+    .addStep(checkout({ name: "Checkout" }))
+    .addStep({ name: "Install deps", run: "npm ci", shell: "bash" })
+    .addStep({ name: "Lint", run: "npm run lint", shell: "bash" });
+
+action.build("setup-env");
+"#;
+
+    let bundled = format!("{}\n\n{}", runtime_stripped, action_js);
+    let outputs = executor::execute_js(&bundled).unwrap();
+
+    assert_eq!(outputs.len(), 1);
+    assert_eq!(outputs[0].id, "setup-env");
+    assert_eq!(outputs[0].output_type, "action");
+
+    let json: serde_json::Value = serde_json::from_str(&outputs[0].json).unwrap();
+    assert_eq!(json["name"], "Setup Environment");
+    assert_eq!(json["description"], "Sets up the build environment");
+    assert_eq!(json["runs"]["using"], "composite");
+    assert_eq!(json["runs"]["steps"][0]["uses"], "actions/checkout@v5");
+    assert_eq!(json["runs"]["steps"][1]["shell"], "bash");
+    assert_eq!(json["runs"]["steps"][1]["run"], "npm ci");
+
+    // Convert to YAML and verify it's valid action.yml
+    let yaml_str = serde_yaml::to_string(&json).unwrap();
+    assert!(yaml_str.contains("using: composite"));
+    assert!(yaml_str.contains("shell: bash"));
+}
+
+/// Test JavaScriptAction migration roundtrip: TypeScript -> QuickJS -> JSON -> YAML.
+#[test]
+fn test_javascript_action_migration_roundtrip() {
+    use gaji::executor;
+
+    let runtime_js = format!(
+        "function getAction(ref) {{ return function(config) {{ return {{ uses: ref }}; }}; }}\n{}",
+        gaji::generator::templates::JOB_WORKFLOW_RUNTIME_TEMPLATE
+    );
+
+    let runtime_stripped = strip_module_syntax(&runtime_js);
+
+    // Simulate migrated JavaScriptAction TypeScript
+    let action_js = r#"
+var action = new JavaScriptAction(
+    {
+        name: "My Node Action",
+        description: "A test Node.js action",
+        inputs: {
+            token: {
+                description: "GitHub token",
+                required: true,
+            },
+        },
+    },
+    {
+        using: "node20",
+        main: "dist/index.js",
+        post: "dist/cleanup.js",
+    },
+);
+
+action.build("my-node-action");
+"#;
+
+    let bundled = format!("{}\n\n{}", runtime_stripped, action_js);
+    let outputs = executor::execute_js(&bundled).unwrap();
+
+    assert_eq!(outputs.len(), 1);
+    assert_eq!(outputs[0].id, "my-node-action");
+    assert_eq!(outputs[0].output_type, "action");
+
+    let json: serde_json::Value = serde_json::from_str(&outputs[0].json).unwrap();
+    assert_eq!(json["name"], "My Node Action");
+    assert_eq!(json["runs"]["using"], "node20");
+    assert_eq!(json["runs"]["main"], "dist/index.js");
+    assert_eq!(json["runs"]["post"], "dist/cleanup.js");
+
+    let yaml_str = serde_yaml::to_string(&json).unwrap();
+    assert!(yaml_str.contains("using: node20"));
+    assert!(yaml_str.contains("main: dist/index.js"));
+}
+
 /// Test WorkflowBuilder.build_all with an empty directory.
 #[tokio::test]
 async fn test_build_all_empty_directory() {

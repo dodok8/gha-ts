@@ -24,6 +24,58 @@ pub fn discover_workflows(root: &Path) -> Result<Vec<PathBuf>> {
     Ok(workflows)
 }
 
+/// Find all action.yml/.yaml files in .github/actions/*/
+pub fn discover_actions(root: &Path) -> Result<Vec<PathBuf>> {
+    let actions_dir = root.join(".github/actions");
+    if !actions_dir.exists() {
+        return Ok(vec![]);
+    }
+
+    let mut actions: Vec<PathBuf> = std::fs::read_dir(&actions_dir)?
+        .filter_map(|entry| entry.ok())
+        .filter(|entry| entry.path().is_dir())
+        .filter_map(|entry| {
+            let yml = entry.path().join("action.yml");
+            let yaml = entry.path().join("action.yaml");
+            if yml.exists() {
+                Some(yml)
+            } else if yaml.exists() {
+                Some(yaml)
+            } else {
+                None
+            }
+        })
+        .collect();
+
+    actions.sort();
+    Ok(actions)
+}
+
+/// Type of action determined from `runs.using` in action.yml.
+#[derive(Debug, Clone, PartialEq)]
+enum ActionType {
+    Composite,
+    JavaScript(String),
+    Docker,
+    Unknown(String),
+}
+
+/// Classify an action.yml based on its `runs.using` field.
+fn classify_action(yaml: &serde_yaml::Value) -> ActionType {
+    let using = yaml
+        .get("runs")
+        .and_then(|r| r.get("using"))
+        .and_then(|u| u.as_str())
+        .unwrap_or("");
+
+    match using {
+        "composite" => ActionType::Composite,
+        u if u.starts_with("node") => ActionType::JavaScript(u.to_string()),
+        "docker" => ActionType::Docker,
+        other => ActionType::Unknown(other.to_string()),
+    }
+}
+
 /// Migrate a list of workflow files to TypeScript.
 /// Creates .ts files in workflows/ and backs up originals.
 pub async fn migrate_workflows(root: &Path, workflows: &[PathBuf]) -> Result<()> {
@@ -62,6 +114,49 @@ pub async fn migrate_workflows(root: &Path, workflows: &[PathBuf]) -> Result<()>
     println!("\n{} Migration complete!", "✨".green());
     println!("   Review the generated TypeScript files in workflows/");
     println!("   Run 'gaji build' to regenerate YAML files\n");
+
+    Ok(())
+}
+
+/// Migrate a list of action files to TypeScript.
+/// Creates .ts files in workflows/ and backs up originals.
+pub async fn migrate_actions(root: &Path, actions: &[PathBuf]) -> Result<()> {
+    println!("{} Migrating actions to TypeScript...\n", "🔄".cyan());
+
+    let ts_dir = root.join("workflows");
+    tokio::fs::create_dir_all(&ts_dir).await?;
+
+    for action_path in actions {
+        let action_id = action_path
+            .parent()
+            .and_then(|p| p.file_name())
+            .and_then(|s| s.to_str())
+            .ok_or_else(|| anyhow!("Invalid action path: {}", action_path.display()))?;
+
+        println!("  Migrating action {}...", action_id);
+
+        let yaml_content = tokio::fs::read_to_string(action_path).await?;
+
+        match generate_typescript_from_action_yaml(&yaml_content, action_id) {
+            Ok(ts_content) => {
+                let ts_path = ts_dir.join(format!("action-{}.ts", action_id));
+                tokio::fs::write(&ts_path, ts_content).await?;
+                println!("  {} Created {}", "✓".green(), ts_path.display());
+
+                // Backup original
+                let backup_path = action_path.with_extension("yml.backup");
+                tokio::fs::rename(action_path, &backup_path).await?;
+                println!("  {} Backed up to {}", "✓".green(), backup_path.display());
+            }
+            Err(e) => {
+                eprintln!("  {} Failed to migrate {}: {}", "✗".red(), action_id, e);
+            }
+        }
+    }
+
+    println!("\n{} Action migration complete!", "✨".green());
+    println!("   Review the generated TypeScript files in workflows/");
+    println!("   Run 'gaji build' to regenerate action YAML files\n");
 
     Ok(())
 }
@@ -155,8 +250,225 @@ fn generate_typescript_from_yaml(yaml_content: &str, workflow_id: &str) -> Resul
     Ok(ts)
 }
 
+/// Convert a single action.yml to TypeScript source code.
+fn generate_typescript_from_action_yaml(yaml_content: &str, action_id: &str) -> Result<String> {
+    let action: serde_yaml::Value =
+        serde_yaml::from_str(yaml_content).map_err(|e| anyhow!("Failed to parse YAML: {}", e))?;
+
+    let action_type = classify_action(&action);
+
+    match action_type {
+        ActionType::Composite => generate_composite_action_ts(&action, action_id),
+        ActionType::JavaScript(using) => generate_javascript_action_ts(&action, action_id, &using),
+        ActionType::Docker => Err(anyhow!(
+            "Docker actions are not yet supported for migration"
+        )),
+        ActionType::Unknown(using) => Err(anyhow!(
+            "Unknown action type '{}' cannot be migrated",
+            using
+        )),
+    }
+}
+
+/// Generate TypeScript for a CompositeAction.
+fn generate_composite_action_ts(action: &serde_yaml::Value, action_id: &str) -> Result<String> {
+    let mut ts = String::new();
+
+    // Header
+    ts.push_str("// Migrated from YAML by gaji init --migrate\n");
+    ts.push_str("// NOTE: This is a basic conversion. Please review and adjust as needed.\n");
+
+    // Extract external actions used in steps
+    let actions = extract_actions_from_composite_steps(action);
+    let has_external_actions = !actions.is_empty();
+
+    if has_external_actions {
+        ts.push_str("import { getAction, CompositeAction } from \"../generated/index.js\";\n\n");
+        for action_ref in &actions {
+            let var_name = action_to_var_name(action_ref);
+            ts.push_str(&format!(
+                "const {} = getAction(\"{}\");\n",
+                var_name, action_ref
+            ));
+        }
+        ts.push('\n');
+    } else {
+        ts.push_str("import { CompositeAction } from \"../generated/index.js\";\n\n");
+    }
+
+    // Constructor config
+    let name = action
+        .get("name")
+        .and_then(|v| v.as_str())
+        .unwrap_or(action_id);
+    let description = action
+        .get("description")
+        .and_then(|v| v.as_str())
+        .unwrap_or("");
+
+    ts.push_str("const action = new CompositeAction({\n");
+    ts.push_str(&format!("    name: \"{}\",\n", escape_js_string(name)));
+    ts.push_str(&format!(
+        "    description: \"{}\",\n",
+        escape_js_string(description)
+    ));
+
+    if let Some(inputs) = action.get("inputs") {
+        ts.push_str("    inputs: ");
+        ts.push_str(&yaml_value_to_js(inputs, 4));
+        ts.push_str(",\n");
+    }
+
+    if let Some(outputs) = action.get("outputs") {
+        ts.push_str("    outputs: ");
+        ts.push_str(&yaml_value_to_js(outputs, 4));
+        ts.push_str(",\n");
+    }
+
+    ts.push_str("});\n\n");
+
+    // Steps
+    if let Some(steps) = action
+        .get("runs")
+        .and_then(|r| r.get("steps"))
+        .and_then(|s| s.as_sequence())
+    {
+        ts.push_str("action\n");
+        for step in steps {
+            generate_composite_action_step(&mut ts, step, &actions);
+        }
+        ts.push_str(";\n\n");
+    }
+
+    // Build call
+    ts.push_str(&format!("action.build(\"{}\");\n", action_id));
+
+    Ok(ts)
+}
+
+/// Generate TypeScript for a JavaScriptAction.
+fn generate_javascript_action_ts(
+    action: &serde_yaml::Value,
+    action_id: &str,
+    using: &str,
+) -> Result<String> {
+    let mut ts = String::new();
+
+    ts.push_str("// Migrated from YAML by gaji init --migrate\n");
+    ts.push_str("// NOTE: This is a basic conversion. Please review and adjust as needed.\n");
+    ts.push_str("import { JavaScriptAction } from \"../generated/index.js\";\n\n");
+
+    let name = action
+        .get("name")
+        .and_then(|v| v.as_str())
+        .unwrap_or(action_id);
+    let description = action
+        .get("description")
+        .and_then(|v| v.as_str())
+        .unwrap_or("");
+
+    let runs = action
+        .get("runs")
+        .ok_or_else(|| anyhow!("Missing 'runs' field"))?;
+    let main = runs
+        .get("main")
+        .and_then(|v| v.as_str())
+        .ok_or_else(|| anyhow!("Missing 'runs.main' field"))?;
+
+    // Config object
+    ts.push_str("const action = new JavaScriptAction(\n");
+    ts.push_str("    {\n");
+    ts.push_str(&format!("        name: \"{}\",\n", escape_js_string(name)));
+    ts.push_str(&format!(
+        "        description: \"{}\",\n",
+        escape_js_string(description)
+    ));
+
+    if let Some(inputs) = action.get("inputs") {
+        ts.push_str("        inputs: ");
+        ts.push_str(&yaml_value_to_js(inputs, 8));
+        ts.push_str(",\n");
+    }
+    if let Some(outputs) = action.get("outputs") {
+        ts.push_str("        outputs: ");
+        ts.push_str(&yaml_value_to_js(outputs, 8));
+        ts.push_str(",\n");
+    }
+
+    ts.push_str("    },\n");
+
+    // Runs object
+    ts.push_str("    {\n");
+    ts.push_str(&format!(
+        "        using: \"{}\",\n",
+        escape_js_string(using)
+    ));
+    ts.push_str(&format!("        main: \"{}\",\n", escape_js_string(main)));
+
+    if let Some(pre) = runs.get("pre").and_then(|v| v.as_str()) {
+        ts.push_str(&format!("        pre: \"{}\",\n", escape_js_string(pre)));
+    }
+    if let Some(post) = runs.get("post").and_then(|v| v.as_str()) {
+        ts.push_str(&format!("        post: \"{}\",\n", escape_js_string(post)));
+    }
+    if let Some(pre_if) = runs.get("pre-if").and_then(|v| v.as_str()) {
+        ts.push_str(&format!(
+            "        \"pre-if\": \"{}\",\n",
+            escape_js_string(pre_if)
+        ));
+    }
+    if let Some(post_if) = runs.get("post-if").and_then(|v| v.as_str()) {
+        ts.push_str(&format!(
+            "        \"post-if\": \"{}\",\n",
+            escape_js_string(post_if)
+        ));
+    }
+
+    ts.push_str("    },\n");
+    ts.push_str(");\n\n");
+
+    ts.push_str(&format!("action.build(\"{}\");\n", action_id));
+
+    Ok(ts)
+}
+
+/// Options for step generation.
+struct StepGenOptions {
+    /// Whether `shell` is required for `run` steps (true for composite action steps).
+    require_shell: bool,
+}
+
 /// Generate a step call in the TypeScript output.
 fn generate_step(ts: &mut String, step: &serde_yaml::Value, actions: &[String]) {
+    generate_step_inner(
+        ts,
+        step,
+        actions,
+        &StepGenOptions {
+            require_shell: false,
+        },
+    );
+}
+
+/// Generate a step call for composite action steps (shell is required for run steps).
+fn generate_composite_action_step(ts: &mut String, step: &serde_yaml::Value, actions: &[String]) {
+    generate_step_inner(
+        ts,
+        step,
+        actions,
+        &StepGenOptions {
+            require_shell: true,
+        },
+    );
+}
+
+/// Shared step generation logic.
+fn generate_step_inner(
+    ts: &mut String,
+    step: &serde_yaml::Value,
+    actions: &[String],
+    options: &StepGenOptions,
+) {
     if let Some(uses) = step.get("uses").and_then(|v| v.as_str()) {
         // Action step
         let var_name = action_to_var_name(uses);
@@ -167,6 +479,10 @@ fn generate_step(ts: &mut String, step: &serde_yaml::Value, actions: &[String]) 
         } else {
             ts.push_str("    .addStep({\n");
             ts.push_str(&format!("        uses: \"{}\",\n", escape_js_string(uses)));
+        }
+
+        if let Some(id) = step.get("id").and_then(|v| v.as_str()) {
+            ts.push_str(&format!("        id: \"{}\",\n", escape_js_string(id)));
         }
 
         if let Some(name) = step.get("name").and_then(|v| v.as_str()) {
@@ -223,6 +539,11 @@ fn generate_step(ts: &mut String, step: &serde_yaml::Value, actions: &[String]) 
     } else if let Some(run) = step.get("run").and_then(|v| v.as_str()) {
         // Run step
         ts.push_str("    .addStep({\n");
+
+        if let Some(id) = step.get("id").and_then(|v| v.as_str()) {
+            ts.push_str(&format!("        id: \"{}\",\n", escape_js_string(id)));
+        }
+
         if let Some(name) = step.get("name").and_then(|v| v.as_str()) {
             ts.push_str(&format!("        name: \"{}\",\n", escape_js_string(name)));
         }
@@ -235,6 +556,20 @@ fn generate_step(ts: &mut String, step: &serde_yaml::Value, actions: &[String]) 
             ts.push_str(&format!("        run: \"{}\"", escape_js_string(run)));
         }
         ts.push_str(",\n");
+
+        // shell is required for composite action run steps
+        if options.require_shell {
+            let shell = step.get("shell").and_then(|v| v.as_str()).unwrap_or("bash");
+            ts.push_str(&format!(
+                "        shell: \"{}\",\n",
+                escape_js_string(shell)
+            ));
+        } else if let Some(shell) = step.get("shell").and_then(|v| v.as_str()) {
+            ts.push_str(&format!(
+                "        shell: \"{}\",\n",
+                escape_js_string(shell)
+            ));
+        }
 
         if let Some(if_cond) = step.get("if").and_then(|v| v.as_str()) {
             ts.push_str(&format!(
@@ -256,6 +591,13 @@ fn generate_step(ts: &mut String, step: &serde_yaml::Value, actions: &[String]) 
             ts.push_str("        },\n");
         }
 
+        if let Some(wd) = step.get("working-directory").and_then(|v| v.as_str()) {
+            ts.push_str(&format!(
+                "        \"working-directory\": \"{}\",\n",
+                escape_js_string(wd)
+            ));
+        }
+
         ts.push_str("    })\n");
     }
 }
@@ -273,6 +615,30 @@ pub fn extract_actions_from_yaml(workflow: &serde_yaml::Value) -> Vec<String> {
                             actions.push(uses.to_string());
                         }
                     }
+                }
+            }
+        }
+    }
+
+    actions.sort();
+    actions.dedup();
+    actions
+}
+
+/// Extract all `uses:` values from composite action steps (runs.steps).
+/// Skips local action references (starting with "./").
+fn extract_actions_from_composite_steps(action: &serde_yaml::Value) -> Vec<String> {
+    let mut actions = Vec::new();
+
+    if let Some(steps) = action
+        .get("runs")
+        .and_then(|r| r.get("steps"))
+        .and_then(|s| s.as_sequence())
+    {
+        for step in steps {
+            if let Some(uses) = step.get("uses").and_then(|v| v.as_str()) {
+                if !uses.starts_with("./") && !actions.contains(&uses.to_string()) {
+                    actions.push(uses.to_string());
                 }
             }
         }
@@ -553,5 +919,192 @@ jobs:
 
         let result = discover_workflows(temp.path()).unwrap();
         assert_eq!(result.len(), 2);
+    }
+
+    #[test]
+    fn test_discover_actions_empty() {
+        let temp = tempfile::TempDir::new().unwrap();
+        let result = discover_actions(temp.path()).unwrap();
+        assert!(result.is_empty());
+    }
+
+    #[test]
+    fn test_discover_actions_finds_action_yml() {
+        let temp = tempfile::TempDir::new().unwrap();
+        let actions_dir = temp.path().join(".github/actions");
+
+        std::fs::create_dir_all(actions_dir.join("my-action")).unwrap();
+        std::fs::write(
+            actions_dir.join("my-action/action.yml"),
+            "name: My Action\nruns:\n  using: composite\n  steps: []",
+        )
+        .unwrap();
+
+        std::fs::create_dir_all(actions_dir.join("other-action")).unwrap();
+        std::fs::write(
+            actions_dir.join("other-action/action.yaml"),
+            "name: Other\nruns:\n  using: node20\n  main: index.js",
+        )
+        .unwrap();
+
+        // Non-action directory (no action.yml)
+        std::fs::create_dir_all(actions_dir.join("not-an-action")).unwrap();
+
+        let result = discover_actions(temp.path()).unwrap();
+        assert_eq!(result.len(), 2);
+    }
+
+    #[test]
+    fn test_classify_action_composite() {
+        let yaml: serde_yaml::Value =
+            serde_yaml::from_str("runs:\n  using: composite\n  steps: []").unwrap();
+        assert_eq!(classify_action(&yaml), ActionType::Composite);
+    }
+
+    #[test]
+    fn test_classify_action_node20() {
+        let yaml: serde_yaml::Value =
+            serde_yaml::from_str("runs:\n  using: node20\n  main: index.js").unwrap();
+        assert_eq!(
+            classify_action(&yaml),
+            ActionType::JavaScript("node20".to_string())
+        );
+    }
+
+    #[test]
+    fn test_classify_action_docker() {
+        let yaml: serde_yaml::Value =
+            serde_yaml::from_str("runs:\n  using: docker\n  image: Dockerfile").unwrap();
+        assert_eq!(classify_action(&yaml), ActionType::Docker);
+    }
+
+    #[test]
+    fn test_generate_composite_action_ts() {
+        let yaml_content = r#"
+name: Setup Project
+description: Sets up the project environment
+inputs:
+  node-version:
+    description: Node.js version
+    required: false
+    default: "20"
+outputs:
+  cache-hit:
+    description: Whether cache was hit
+runs:
+  using: composite
+  steps:
+    - uses: actions/checkout@v5
+    - name: Setup Node
+      run: echo "Setting up node"
+      shell: bash
+"#;
+        let ts = generate_typescript_from_action_yaml(yaml_content, "setup-project").unwrap();
+
+        assert!(ts.contains("import { getAction, CompositeAction }"));
+        assert!(ts.contains("new CompositeAction("));
+        assert!(ts.contains("name: \"Setup Project\""));
+        assert!(ts.contains("description: \"Sets up the project environment\""));
+        assert!(ts.contains("action.build(\"setup-project\")"));
+        assert!(ts.contains(".addStep("));
+        assert!(ts.contains("shell: \"bash\""));
+        assert!(ts.contains(r#"getAction("actions/checkout@v5")"#));
+    }
+
+    #[test]
+    fn test_generate_composite_action_ts_no_external_actions() {
+        let yaml_content = r#"
+name: Simple Action
+description: A simple action
+runs:
+  using: composite
+  steps:
+    - name: Hello
+      run: echo hello
+      shell: bash
+"#;
+        let ts = generate_typescript_from_action_yaml(yaml_content, "simple-action").unwrap();
+
+        assert!(ts.contains("import { CompositeAction } from"));
+        assert!(!ts.contains("getAction"));
+        assert!(ts.contains("new CompositeAction("));
+        assert!(ts.contains("shell: \"bash\""));
+    }
+
+    #[test]
+    fn test_generate_composite_action_ts_default_shell() {
+        let yaml_content = r#"
+name: Action
+description: Test
+runs:
+  using: composite
+  steps:
+    - name: No shell specified
+      run: echo test
+"#;
+        let ts = generate_typescript_from_action_yaml(yaml_content, "test-action").unwrap();
+
+        // Shell should default to "bash" for composite action run steps
+        assert!(ts.contains("shell: \"bash\""));
+    }
+
+    #[test]
+    fn test_generate_javascript_action_ts() {
+        let yaml_content = r#"
+name: My JS Action
+description: A Node.js action
+inputs:
+  token:
+    description: GitHub token
+    required: true
+runs:
+  using: node20
+  main: dist/index.js
+  pre: dist/pre.js
+  post: dist/post.js
+  post-if: success()
+"#;
+        let ts = generate_typescript_from_action_yaml(yaml_content, "my-js-action").unwrap();
+
+        assert!(ts.contains("import { JavaScriptAction }"));
+        assert!(ts.contains("new JavaScriptAction("));
+        assert!(ts.contains("using: \"node20\""));
+        assert!(ts.contains("main: \"dist/index.js\""));
+        assert!(ts.contains("pre: \"dist/pre.js\""));
+        assert!(ts.contains("post: \"dist/post.js\""));
+        assert!(ts.contains("\"post-if\": \"success()\""));
+        assert!(ts.contains("action.build(\"my-js-action\")"));
+    }
+
+    #[test]
+    fn test_generate_docker_action_fails() {
+        let yaml_content = "name: Docker\nruns:\n  using: docker\n  image: Dockerfile";
+        let result = generate_typescript_from_action_yaml(yaml_content, "docker-action");
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("Docker"));
+    }
+
+    #[test]
+    fn test_extract_actions_from_composite_steps() {
+        let yaml: serde_yaml::Value = serde_yaml::from_str(
+            r#"
+runs:
+  using: composite
+  steps:
+    - uses: actions/checkout@v5
+    - uses: actions/setup-node@v4
+    - name: Build
+      run: npm run build
+      shell: bash
+    - uses: "./.github/actions/local-action"
+"#,
+        )
+        .unwrap();
+        let actions = extract_actions_from_composite_steps(&yaml);
+        // Should include external actions but NOT local action references
+        assert_eq!(
+            actions,
+            vec!["actions/checkout@v5", "actions/setup-node@v4"]
+        );
     }
 }

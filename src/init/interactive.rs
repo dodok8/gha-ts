@@ -23,6 +23,7 @@ pub async fn interactive_init(root: &Path) -> Result<()> {
     let project_state = detect_project_state(root)?;
 
     let mut selected_workflows: Option<Vec<std::path::PathBuf>> = None;
+    let mut selected_actions: Option<Vec<std::path::PathBuf>> = None;
 
     match &project_state {
         ProjectState::Empty => {
@@ -69,6 +70,51 @@ pub async fn interactive_init(root: &Path) -> Result<()> {
                             Some(selections.iter().map(|&i| workflows[i].clone()).collect());
                     } else {
                         selected_workflows = Some(workflows);
+                    }
+                }
+            }
+
+            let actions = migration::discover_actions(root)?;
+            if !actions.is_empty() {
+                println!("Found {} action(s):", actions.len());
+                for action_path in &actions {
+                    let action_id = action_path
+                        .parent()
+                        .and_then(|p| p.file_name())
+                        .and_then(|s| s.to_str())
+                        .unwrap_or("unknown");
+                    println!("  - {}", action_id);
+                }
+                println!();
+
+                let should_migrate_actions = Confirm::with_theme(&ColorfulTheme::default())
+                    .with_prompt("Migrate existing actions to TypeScript?")
+                    .default(false)
+                    .interact()?;
+
+                if should_migrate_actions {
+                    if actions.len() > 1 {
+                        let names: Vec<String> = actions
+                            .iter()
+                            .map(|p| {
+                                p.parent()
+                                    .and_then(|d| d.file_name())
+                                    .unwrap_or_default()
+                                    .to_string_lossy()
+                                    .to_string()
+                            })
+                            .collect();
+
+                        let selections = MultiSelect::with_theme(&ColorfulTheme::default())
+                            .with_prompt("Select actions to migrate")
+                            .items(&names)
+                            .defaults(&vec![true; names.len()])
+                            .interact()?;
+
+                        selected_actions =
+                            Some(selections.iter().map(|&i| actions[i].clone()).collect());
+                    } else {
+                        selected_actions = Some(actions);
                     }
                 }
             }
@@ -141,6 +187,11 @@ pub async fn interactive_init(root: &Path) -> Result<()> {
     // Execute migration if requested
     if let Some(wfs) = &selected_workflows {
         migration::migrate_workflows(root, wfs).await?;
+    }
+
+    // Execute action migration if requested
+    if let Some(acts) = &selected_actions {
+        migration::migrate_actions(root, acts).await?;
     }
 
     // Create custom config with user-specified directories

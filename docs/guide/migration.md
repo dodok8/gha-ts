@@ -16,6 +16,150 @@ This will:
 3. Backup original YAML files (`.yml.backup`)
 4. Generate types for all actions used
 
+## Action Migration
+
+gaji also migrates existing local actions (`.github/actions/*/action.yml`) to TypeScript:
+
+```bash
+gaji init --migrate
+```
+
+This detects both workflows and actions automatically. Actions are converted to `CompositeAction` or `JavaScriptAction` classes depending on the `runs.using` field.
+
+### Composite Action
+
+**Before** (`.github/actions/setup-env/action.yml`):
+
+```yaml
+name: Setup Environment
+description: Setup Node.js and install dependencies
+inputs:
+  node-version:
+    description: Node.js version to use
+    required: false
+    default: "20"
+outputs:
+  cache-hit:
+    description: Whether cache was hit
+    value: ${{ steps.cache.outputs.cache-hit }}
+runs:
+  using: composite
+  steps:
+    - uses: actions/checkout@v5
+    - name: Install dependencies
+      run: npm ci
+      shell: bash
+    - name: Cache node_modules
+      id: cache
+      uses: actions/cache@v4
+      with:
+        path: node_modules
+        key: ${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}
+```
+
+**After** (`workflows/action-setup-env.ts`):
+
+```typescript
+import { getAction, CompositeAction } from "../generated/index.js";
+
+const checkout = getAction("actions/checkout@v5");
+const cache = getAction("actions/cache@v4");
+
+const action = new CompositeAction({
+    name: "Setup Environment",
+    description: "Setup Node.js and install dependencies",
+    inputs: {
+        "node-version": {
+            description: "Node.js version to use",
+            required: false,
+            default: "20",
+        },
+    },
+    outputs: {
+        "cache-hit": {
+            description: "Whether cache was hit",
+            value: "${{ steps.cache.outputs.cache-hit }}",
+        },
+    },
+});
+
+action
+    .addStep(checkout({}))
+    .addStep({
+        name: "Install dependencies",
+        run: "npm ci",
+        shell: "bash",
+    })
+    .addStep(cache({
+        id: "cache",
+        name: "Cache node_modules",
+        with: {
+            path: "node_modules",
+            key: "${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}",
+        },
+    }));
+
+action.build("setup-env");
+```
+
+### JavaScript Action
+
+**Before** (`.github/actions/notify/action.yml`):
+
+```yaml
+name: Send Notification
+description: Send a Slack notification
+inputs:
+  webhook-url:
+    description: Slack webhook URL
+    required: true
+  message:
+    description: Message to send
+    required: true
+runs:
+  using: node20
+  main: dist/index.js
+  post: dist/cleanup.js
+```
+
+**After** (`workflows/action-notify.ts`):
+
+```typescript
+import { JavaScriptAction } from "../generated/index.js";
+
+const action = new JavaScriptAction(
+    {
+        name: "Send Notification",
+        description: "Send a Slack notification",
+        inputs: {
+            "webhook-url": {
+                description: "Slack webhook URL",
+                required: true,
+            },
+            message: {
+                description: "Message to send",
+                required: true,
+            },
+        },
+    },
+    {
+        using: "node20",
+        main: "dist/index.js",
+        post: "dist/cleanup.js",
+    },
+);
+
+action.build("notify");
+```
+
+### Supported Action Types
+
+| Type       | `runs.using`                 | Migrated To                          |
+| ---------- | ---------------------------- | ------------------------------------ |
+| Composite  | `composite`                  | `CompositeAction`                    |
+| JavaScript | `node12`, `node16`, `node20` | `JavaScriptAction`                   |
+| Docker     | `docker`                     | Not supported (skipped with warning) |
+
 ## Manual Migration
 
 If you prefer to migrate manually, follow these steps:
