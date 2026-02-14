@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.2](https://github.com/dodok8/gaji/compare/v0.4.1...v0.4.2) - 2026-02-14
+
+### Added
+
+- parallel action.yml downloads with buffer_unordered ([#44](https://github.com/dodok8/gaji/pull/44))
+
+### Other
+
+- update roadmap
+
 ## [0.4.1](https://github.com/dodok8/gaji/compare/v0.4.0...v0.4.1) - 2026-02-14
 
 ### Added
