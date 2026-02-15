@@ -3,7 +3,7 @@
 이 가이드는 gaji를 사용하여 타입 안전한 GitHub Actions 워크플로우를 작성하는 방법을 설명합니다.
 
 ::: tip 독립 실행형 TypeScript 파일
-gaji가 생성한 워크플로우 파일은 완전히 독립적이고 자체 포함됩니다. 어떤 TypeScript 런타임(tsx, ts-node, Deno)으로도 직접 실행하여 워크플로우 JSON을 출력할 수 있습니다. 디버깅과 검사가 쉬워집니다!
+gaji가 생성한 워크플로우 파일은 독립적으로 실행 가능합니다. TypeScript 런타임(tsx, ts-node, Deno)으로 직접 실행하여 워크플로우 JSON을 출력할 수 있습니다. 디버깅과 검사에 편리합니다.
 :::
 
 ## 기본 구조
@@ -38,12 +38,10 @@ workflow.build("ci");
 
 ## 액션 사용하기
 
-### 액션 추가
-
-먼저 액션을 추가하고 타입 생성:
+### gaji dev 실행
 
 ```bash
-gaji add actions/checkout@v5
+gaji dev --watch
 ```
 
 ### 액션 가져오기
@@ -62,7 +60,7 @@ const cache = getAction("actions/cache@v4");
 
 ```typescript
 const step = checkout({
-  name: "코드 체크아웃",
+  name: "Checkout code",
   with: {
     // ✅ 모든 입력에 대한 완전한 자동완성!
     repository: "owner/repo",
@@ -81,7 +79,7 @@ const step = checkout({
 
 ## CompositeJob
 
-`CompositeJob`을 사용하여 재사용 가능한 작업 템플릿을 만듭니다:
+`CompositeJob`을 사용하여 재사용 가능한 Job을 정의할 수 있습니다.
 
 ```ts twoslash
 // @noErrors
@@ -98,22 +96,22 @@ class NodeTestJob extends CompositeJob {
     super("ubuntu-latest");
 
     this
-      .addStep(checkout({ name: "코드 체크아웃" }))
+      .addStep(checkout({ name: "Checkout code" }))
       .addStep(setupNode({
-        name: `Node.js ${nodeVersion} 설정`,
+        name: `Setup Node.js ${nodeVersion}`,
         with: {
           "node-version": nodeVersion,
           cache: "npm",
         },
       }))
-      .addStep({ name: "의존성 설치", run: "npm ci" })
-      .addStep({ name: "테스트 실행", run: "npm test" });
+      .addStep({ name: "Install dependencies", run: "npm ci" })
+      .addStep({ name: "Run tests", run: "npm test" });
   }
 }
 
 // 워크플로우에서 사용
 const workflow = new Workflow({
-  name: "테스트 매트릭스",
+  name: "Test Matrix",
   on: { push: { branches: ["main"] } },
 })
   .addJob("test-node-18", new NodeTestJob("18"))
@@ -121,38 +119,139 @@ const workflow = new Workflow({
   .addJob("test-node-22", new NodeTestJob("22"));
 ```
 
-### 고급 예제: 매개변수화된 작업
+## 전체 예제: CallJob과 조합하여 환경별 배포 워크플로우 구성
 
-```typescript
-class DeployJob extends CompositeJob {
-  constructor(environment: "staging" | "production") {
-    super("ubuntu-latest");
+재사용 가능한 워크플로우(`workflow_call`)를 만든 뒤, `CallJob`으로 환경마다 호출하는 패턴입니다.
 
-    this
-      .env({
-        ENVIRONMENT: environment,
-        API_URL: environment === "production"
-          ? "https://api.example.com"
-          : "https://staging.api.example.com",
-      })
-      .addStep(checkout({}))
-      .addStep(setupNode({ with: { "node-version": "20" } }))
-      .addStep({
-        name: "배포",
-        run: `npm run deploy:${environment}`,
-        env: {
-          DEPLOY_TOKEN: "${{ secrets.DEPLOY_TOKEN }}",
+먼저, 배포 작업을 담은 재사용 가능한 워크플로우를 작성합니다. `workflow_call`의 `inputs`로 환경 이름을 받습니다.
+
+```ts twoslash
+// @noErrors
+// @filename: workflows/publish.ts
+// ---cut---
+import { getAction, Job, Workflow } from "../generated/index.js";
+
+const checkout = getAction("actions/checkout@v5");
+const setupNode = getAction("actions/setup-node@v4");
+
+const publish = new Job("ubuntu-latest")
+  .addStep(checkout({ name: "Checkout" }))
+  .addStep(setupNode({
+    name: "Setup Node.js",
+    with: { "node-version": "20", cache: "npm" },
+  }))
+  .addStep({ name: "Install dependencies", run: "npm ci" })
+  .addStep({ name: "Build", run: "npm run build" })
+  .addStep({
+    name: "Publish",
+    run: "npm run publish:${{ inputs.environment }}",
+    env: {
+      DEPLOY_TOKEN: "${{ secrets.DEPLOY_TOKEN }}",
+    },
+  });
+
+const workflow = new Workflow({
+  name: "Publish",
+  on: {
+    workflow_call: {
+      inputs: {
+        environment: {
+          description: "배포 대상 환경 (alpha, staging, live)",
+          required: true,
+          type: "choice",
+          options: ["alpha", "staging", "live"],
         },
-      });
-  }
-}
+      },
+      secrets: {
+        DEPLOY_TOKEN: { required: true },
+      },
+    },
+  },
+}).addJob("publish", publish);
+
+workflow.build("publish");
 ```
 
-**장점:**
-- 일반적인 작업 패턴 재사용
-- 타입 안전한 매개변수
-- 유지보수 용이
-- 일관된 작업 구조
+다음으로, `CallJob`을 사용하여 이 워크플로우를 환경별로 호출합니다. `needs`로 alpha → staging → live 순서를 지정합니다:
+
+```ts twoslash
+// @noErrors
+// @filename: workflows/release.ts
+// ---cut---
+import { CallJob, Workflow } from "../generated/index.js";
+
+const alpha = new CallJob("./.github/workflows/publish.yml")
+  .with({ environment: "alpha" })
+  .secrets("inherit");
+
+const staging = new CallJob("./.github/workflows/publish.yml")
+  .with({ environment: "staging" })
+  .secrets("inherit")
+  .needs(["publish-alpha"]);
+
+const live = new CallJob("./.github/workflows/publish.yml")
+  .with({ environment: "live" })
+  .secrets("inherit")
+  .needs(["publish-staging"]);
+
+const workflow = new Workflow({
+  name: "Release",
+  on: { push: { tags: ["v*"] } },
+})
+  .addJob("publish-alpha", alpha)
+  .addJob("publish-staging", staging)
+  .addJob("publish-live", live);
+
+workflow.build("release");
+```
+
+이 구조의 장점은 배포 로직이 `publish.yml` 한 곳에만 존재한다는 점입니다. 배포 스텝을 수정해야 할 때 `publish.ts`만 고치면 세 환경 모두에 반영됩니다.
+
+## DockerAction
+
+[Docker 컨테이너 액션](https://docs.github.com/en/actions/sharing-automations/creating-actions/creating-a-docker-container-action)을 정의합니다. `runs.using`이 `"docker"`이며, 이미지와 entrypoint를 지정합니다.
+
+```ts twoslash
+// @noErrors
+// @filename: workflows/example.ts
+// ---cut---
+import { DockerAction } from "../generated/index.js";
+
+const action = new DockerAction(
+  {
+    name: "Lint with Super-Linter",
+    description: "Run Super-Linter in a Docker container",
+    inputs: {
+      args: {
+        description: "Linter arguments",
+        required: false,
+      },
+    },
+  },
+  {
+    using: "docker",
+    image: "Dockerfile",
+    entrypoint: "entrypoint.sh",
+    args: ["--config", ".lintrc"],
+    env: {
+      DEFAULT_BRANCH: "main",
+    },
+  },
+);
+
+action.build("super-linter");
+```
+
+`DockerAction`은 `.github/actions/<id>/action.yml`을 생성합니다. `CallAction.from()`으로 워크플로우에서 참조할 수 있습니다.
+
+Docker Hub 이미지를 직접 사용하려면 `image`에 `docker://` 접두사를 붙입니다:
+
+```typescript
+{
+  using: "docker",
+  image: "docker://alpine:3.19",
+}
+```
 
 ## 팁
 

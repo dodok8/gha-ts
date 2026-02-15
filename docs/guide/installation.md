@@ -8,8 +8,6 @@ gaji bundles QuickJS internally, so you don't need Node.js or any external JavaS
 
 ## npm
 
-Install gaji via npm:
-
 ```bash
 npm install -D gaji
 ```
@@ -46,61 +44,67 @@ gaji --help
 
 ## Binary Download
 
-Download pre-built binaries from [GitHub Releases](https://github.com/dodok8/gaji/releases):
+Download pre-built binaries from [GitHub Releases](https://github.com/dodok8/gaji/releases).
 
 ### Linux (x64)
+
 ```bash
 curl -L https://github.com/dodok8/gaji/releases/latest/download/gaji-linux-x64.tar.gz | tar xz
 sudo mv gaji /usr/local/bin/
 ```
 
 ### macOS (ARM64)
+
 ```bash
 curl -L https://github.com/dodok8/gaji/releases/latest/download/gaji-darwin-arm64.tar.gz | tar xz
 sudo mv gaji /usr/local/bin/
 ```
 
 ### macOS (x64)
+
 ```bash
 curl -L https://github.com/dodok8/gaji/releases/latest/download/gaji-darwin-x64.tar.gz | tar xz
 sudo mv gaji /usr/local/bin/
 ```
 
 ### Windows
+
 Download `gaji-win32-x64.tar.gz` from the releases page and extract it to a directory in your PATH.
 
 ## Verify Installation
 
-Check that gaji is installed correctly:
-
 ```bash
-gaji --version
+gaji --version  # Prints the gaji version
 ```
 
 ## Requirements
 
 gaji has **no runtime dependencies**:
 
-- ✅ **No Node.js required** - gaji bundles QuickJS internally
-- ✅ **No external JavaScript runtime** - completely self-contained
-- ✅ Works with **any language or build tool**
+- ✅ No Node.js required — gaji bundles QuickJS internally
+- ✅ No external JavaScript runtime needed
+- ✅ Works with any language or build tool
 
 The only requirement is a package manager if installing via npm:
+
 - **npm/pnpm/yarn** (for npm installation only)
 
 ## Updating
 
 ### npm
+
 ```bash
 npm update gaji
 ```
 
 ### Cargo
+
 ```bash
 cargo install gaji --force
 ```
 
 ### Binary
+
 Download and replace the binary with the latest version from GitHub Releases.
 
 ## Next Steps

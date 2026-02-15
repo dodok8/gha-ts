@@ -20,22 +20,22 @@ class NodeTestJob extends CompositeJob {
     super("ubuntu-latest");
 
     this
-      .addStep(checkout({ name: "코드 체크아웃" }))
+      .addStep(checkout({ name: "Checkout code" }))
       .addStep(setupNode({
-        name: `Node.js ${nodeVersion} 설정`,
+        name: `Setup Node.js ${nodeVersion}`,
         with: {
           "node-version": nodeVersion,
           cache: "npm",
         },
       }))
-      .addStep({ name: "의존성 설치", run: "npm ci" })
-      .addStep({ name: "테스트 실행", run: "npm test" });
+      .addStep({ name: "Install dependencies", run: "npm ci" })
+      .addStep({ name: "Run tests", run: "npm test" });
   }
 }
 
 // 워크플로우에서 사용
 const workflow = new Workflow({
-  name: "테스트 매트릭스",
+  name: "Test Matrix",
   on: { push: { branches: ["main"] } },
 })
   .addJob("test-node-18", new NodeTestJob("18"))
@@ -63,21 +63,21 @@ class DeployJob extends CompositeJob {
           ? "https://api.example.com"
           : "https://staging.api.example.com",
       })
-      .addStep(checkout({ name: "코드 체크아웃" }))
+      .addStep(checkout({ name: "Checkout code" }))
       .addStep(setupNode({
-        name: "Node.js 설정",
+        name: "Setup Node.js",
         with: {
           "node-version": "20",
           cache: "npm",
         },
       }))
-      .addStep({ name: "의존성 설치", run: "npm ci" })
+      .addStep({ name: "Install dependencies", run: "npm ci" })
       .addStep({
-        name: "빌드",
+        name: "Build",
         run: `npm run build:${environment}`,
       })
       .addStep({
-        name: `${environment}에 배포`,
+        name: `Deploy to ${environment}`,
         run: `npm run deploy`,
         env: {
           DEPLOY_TOKEN: "${{ secrets.DEPLOY_TOKEN }}",
@@ -89,7 +89,7 @@ class DeployJob extends CompositeJob {
 
 // 워크플로우에서 사용
 const workflow = new Workflow({
-  name: "배포",
+  name: "Deploy",
   on: { push: { tags: ["v*"] } },
 })
   .addJob("deploy-staging-us", new DeployJob("staging", "us-east-1"))
@@ -104,23 +104,11 @@ workflow.build("deploy");
 
 ## 장점
 
-### 코드 재사용
+Composite action과 CompositeJob을 사용하면 패턴을 한 번 정의하고 여러 워크플로우에서 재사용할 수 있습니다. 액션 입력과 작업 매개변수가 타입 체크되어 리팩토링이 안전합니다. 공유 정의를 수정하면 모든 호출처에 반영됩니다.
 
-- 일반 패턴을 한 번 정의
-- 여러 워크플로우에서 재사용
-- 일관성 유지
+## 더 읽어보기
 
-### 타입 안전성
-
-- 매개변수가 타입 체크됨
-- 리팩토링이 더 안전
-- 자동완성 작동
-
-### 유지보수 용이
-
-- 한 곳에서 로직 업데이트
-- 변경 사항이 자동으로 전파
-- 중복 감소
+- [Composite Action](https://docs.github.com/en/actions/tutorials/create-actions/create-a-composite-action)
 
 ## 다음 단계
 

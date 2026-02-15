@@ -333,23 +333,11 @@ workflow.build("full-test");
 
 ## Benefits
 
-### Code Reuse
+Composite actions and CompositeJob let you define patterns once and reuse them across workflows. Action inputs and job parameters are type-checked, so refactoring is safer. Updates to the shared definition propagate to all callers.
 
-- Define common patterns once
-- Reuse across multiple workflows
-- Maintain consistency
+## Further Reading
 
-### Type Safety
-
-- Parameters are type-checked
-- Refactoring is safer
-- Autocomplete works
-
-### Easier Maintenance
-
-- Update logic in one place
-- Changes propagate automatically
-- Reduce duplication
+- [Composite Action](https://docs.github.com/en/actions/tutorials/create-actions/create-a-composite-action)
 
 ## Next Steps
 

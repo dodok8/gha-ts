@@ -4,13 +4,14 @@ This guide helps you migrate existing YAML workflows to TypeScript with gaji.
 
 ## Automatic Migration
 
-gaji can automatically convert existing YAML workflows to TypeScript:
+gaji can automatically convert existing YAML workflows to TypeScript.
 
 ```bash
 gaji init --migrate
 ```
 
-This will:
+The process follows this order:
+
 1. Detect existing YAML workflows in `.github/workflows/`
 2. Convert them to TypeScript in `workflows/`
 3. Backup original YAML files (`.yml.backup`)
@@ -18,13 +19,13 @@ This will:
 
 ## Action Migration
 
-gaji also migrates existing local actions (`.github/actions/*/action.yml`) to TypeScript:
+gaji also migrates existing local actions (`.github/actions/*/action.yml`) to TypeScript.
 
 ```bash
 gaji init --migrate
 ```
 
-This detects both workflows and actions automatically. Actions are converted to `CompositeAction` or `JavaScriptAction` classes depending on the `runs.using` field.
+This detects both workflows and actions automatically. Actions are converted to `CompositeAction`, `JavaScriptAction`, or `DockerAction` classes depending on the `runs.using` field.
 
 ### Composite Action
 
@@ -152,21 +153,70 @@ const action = new JavaScriptAction(
 action.build("notify");
 ```
 
+### Docker Action
+
+**Before** (`.github/actions/lint/action.yml`):
+
+```yaml
+name: Lint
+description: Run linter in Docker
+inputs:
+  config:
+    description: Config file path
+    required: false
+    default: ".lintrc"
+runs:
+  using: docker
+  image: Dockerfile
+  entrypoint: entrypoint.sh
+  args:
+    - --config
+    - ${{ inputs.config }}
+```
+
+**After** (`workflows/action-lint.ts`):
+
+```typescript
+import { DockerAction } from "../generated/index.js";
+
+const action = new DockerAction(
+    {
+        name: "Lint",
+        description: "Run linter in Docker",
+        inputs: {
+            config: {
+                description: "Config file path",
+                required: false,
+                default: ".lintrc",
+            },
+        },
+    },
+    {
+        using: "docker",
+        image: "Dockerfile",
+        entrypoint: "entrypoint.sh",
+        args: ["--config", "${{ inputs.config }}"],
+    },
+);
+
+action.build("lint");
+```
+
 ### Supported Action Types
 
-| Type       | `runs.using`                 | Migrated To                          |
-| ---------- | ---------------------------- | ------------------------------------ |
-| Composite  | `composite`                  | `CompositeAction`                    |
-| JavaScript | `node12`, `node16`, `node20` | `JavaScriptAction`                   |
-| Docker     | `docker`                     | Not supported (skipped with warning) |
+| Type       | `runs.using`                 | Migrated To        |
+| ---------- | ---------------------------- | ------------------ |
+| Composite  | `composite`                  | `CompositeAction`  |
+| JavaScript | `node12`, `node16`, `node20` | `JavaScriptAction` |
+| Docker     | `docker`                     | `DockerAction`     |
 
 ## Manual Migration
 
-If you prefer to migrate manually, follow these steps:
+If you prefer to migrate manually, follow this process.
 
 ### Step 1: Analyze Your YAML
 
-Start with a simple YAML workflow:
+Here is a simple YAML workflow as an example.
 
 ```yaml
 name: CI
@@ -235,9 +285,6 @@ workflow.build("ci");
 ```bash
 # Build TypeScript to YAML
 gaji build
-
-# Compare with original
-diff .github/workflows/ci.yml .github/workflows/ci.yml.backup
 ```
 
 ### Step 5: Clean Up

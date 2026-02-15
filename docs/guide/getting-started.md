@@ -1,26 +1,22 @@
 # Getting Started
 
-This guide will help you get started with gaji in just a few minutes.
+This guide covers initial setup and your first workflow.
 
 ## Installation
 
-Install gaji using npm (recommended):
+For Node-based projects, use your package manager. For other languages or environments, use cargo or `npm install --global`.
 
 ```bash
 npm install -D gaji
-```
-
-Or using other methods:
-
-```bash
-# Using cargo
-cargo install gaji
 
 # Using pnpm
 pnpm add -D gaji
 
 # Using yarn
 yarn add -D gaji
+
+# Using cargo
+cargo install gaji
 ```
 
 See [Installation](./installation.md) for more options.
@@ -159,9 +155,11 @@ jobs:
 Follow this workflow for the best experience:
 
 1. **Start watch mode**:
+
    ```bash
    gaji init dev --watch
    ```
+
    Leave this running in a terminal.
 
 2. **Edit your workflow**:
@@ -170,6 +168,7 @@ Follow this workflow for the best experience:
    - When you add a new action with `getAction()`, gaji automatically fetches and generates types
 
 3. **Build to YAML**:
+
    ```bash
    gaji init build
    ```
@@ -180,6 +179,7 @@ Follow this workflow for the best experience:
    - Check that all required fields are present
 
 5. **Commit both files**:
+
    ```bash
    git add workflows/ci.ts .github/workflows/ci.yml
    git commit -m "Add CI workflow"
@@ -191,8 +191,6 @@ You should commit **both** the TypeScript source and the generated YAML:
 
 - **TypeScript** (`workflows/*.ts`): Source of truth, version controlled
 - **YAML** (`.github/workflows/*.yml`): What GitHub Actions executes
-
-## Important: Auto-compilation
 
 ::: warning Important
 While you can create a workflow that auto-compiles TypeScript to YAML on push, **this is NOT recommended**. Always compile and review locally before committing.

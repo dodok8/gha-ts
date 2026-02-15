@@ -1,6 +1,6 @@
 # 예제: 간단한 CI
 
-push 및 pull request에서 테스트를 실행하는 기본 CI 워크플로우입니다.
+push 및 pull request 시 테스트를 실행하는 기본 CI 워크플로우입니다.
 
 ## 워크플로우
 
@@ -13,25 +13,25 @@ const setupNode = getAction("actions/setup-node@v4");
 // 테스트 작업 정의
 const test = new Job("ubuntu-latest")
   .addStep(checkout({
-    name: "코드 체크아웃",
+    name: "Checkout code",
   }))
   .addStep(setupNode({
-    name: "Node.js 설정",
+    name: "Setup Node.js",
     with: {
       "node-version": "20",
       cache: "npm",
     },
   }))
   .addStep({
-    name: "의존성 설치",
+    name: "Install dependencies",
     run: "npm ci",
   })
   .addStep({
-    name: "린터 실행",
+    name: "Run linter",
     run: "npm run lint",
   })
   .addStep({
-    name: "테스트 실행",
+    name: "Run tests",
     run: "npm test",
   });
 
@@ -54,21 +54,16 @@ workflow.build("ci");
 
 ## 설정
 
-1. **필요한 액션 추가**:
+
+1. **타입 생성**:
    ```bash
-   gaji add actions/checkout@v5
-   gaji add actions/setup-node@v4
+   gaji dev --watch
    ```
 
-2. **타입 생성**:
-   ```bash
-   gaji dev
-   ```
-
-3. **워크플로우 생성**:
+2. **워크플로우 생성**:
    위 코드로 `workflows/ci.ts` 생성.
 
-4. **빌드**:
+3. **빌드**:
    ```bash
    gaji build
    ```

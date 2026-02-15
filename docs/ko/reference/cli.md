@@ -12,7 +12,7 @@
 gaji init [옵션]
 ```
 
-**옵션:**
+**옵션.**
 
 | 옵션 | 설명 |
 |------|------|
@@ -21,7 +21,7 @@ gaji init [옵션]
 | `--migrate` | 기존 YAML 워크플로우를 TypeScript로 마이그레이션 |
 | `-i, --interactive` | 프롬프트와 함께 대화형 모드 |
 
-**예제:**
+**예제.**
 
 ```bash
 # 기본 초기화
@@ -37,7 +37,7 @@ gaji init --interactive
 gaji init --force
 ```
 
-**동작:**
+**동작.**
 
 - `workflows/` 디렉토리 생성
 - `generated/` 디렉토리 생성
@@ -56,14 +56,14 @@ gaji init --force
 gaji dev [옵션]
 ```
 
-**옵션:**
+**옵션.**
 
 | 옵션 | 설명 |
 |------|------|
-| `-d, --dir <DIR>` | 스캔할 디렉토리 (기본값: `workflows`) |
+| `-d, --dir <DIR>` | 스캔할 디렉토리 (기본값. `workflows`) |
 | `--watch` | 초기 스캔 후 변경 사항 계속 감시 |
 
-**예제:**
+**예제.**
 
 ```bash
 # 일회성 스캔
@@ -76,7 +76,7 @@ gaji dev --watch
 gaji dev --dir src/workflows
 ```
 
-**동작:**
+**동작.**
 
 - `workflows/`의 모든 `.ts` 파일 스캔
 - `getAction()` 호출 추출
@@ -84,7 +84,7 @@ gaji dev --dir src/workflows
 - `generated/`에 TypeScript 타입 생성
 - 캐시 업데이트 (`.gaji-cache.json`)
 
-**감시 모드:**
+**감시 모드.**
 
 감시 모드에서 gaji는 워크플로우 파일을 지속적으로 모니터링합니다. `getAction()`으로 새 액션을 추가하면 타입이 자동으로 생성됩니다.
 
@@ -98,15 +98,15 @@ TypeScript 워크플로우를 YAML로 빌드합니다.
 gaji build [옵션]
 ```
 
-**옵션:**
+**옵션.**
 
 | 옵션 | 설명 |
 |------|------|
-| `-i, --input <DIR>` | TypeScript 워크플로우가 있는 입력 디렉토리 (기본값: `workflows`) |
-| `-o, --output <DIR>` | YAML 파일 출력 디렉토리 (기본값: `.github`) |
+| `-i, --input <DIR>` | TypeScript 워크플로우가 있는 입력 디렉토리 (기본값. `workflows`) |
+| `-o, --output <DIR>` | YAML 파일 출력 디렉토리 (기본값. `.github`) |
 | `--dry-run` | 파일 작성 없이 YAML 출력 미리보기 |
 
-**예제:**
+**예제.**
 
 ```bash
 # 모든 워크플로우 빌드
@@ -119,11 +119,11 @@ gaji build --dry-run
 gaji build --input src/workflows --output .github
 ```
 
-::: tip
+... tip
 검증과 포맷 옵션은 CLI 플래그가 아닌 `.gaji.toml`에서 설정합니다. [설정](../guide/configuration.md)을 참조하세요.
-:::
+...
 
-**동작:**
+**동작.**
 
 - `workflows/`의 모든 `.ts` 파일 찾기
 - 내장 QuickJS 엔진으로 실행 (`npx tsx` 폴백)
@@ -141,13 +141,13 @@ GitHub Action을 추가하고 타입을 생성합니다.
 gaji add <ACTION_REF>
 ```
 
-**인수:**
+**인수.**
 
 | 인수 | 설명 |
 |------|------|
 | `<ACTION_REF>` | GitHub 액션 참조 (예: `actions/checkout@v5`) |
 
-**예제:**
+**예제.**
 
 ```bash
 # 일반 액션 추가
@@ -162,7 +162,7 @@ gaji add softprops/action-gh-release@v1
 gaji add docker/setup-buildx-action@v3
 ```
 
-**동작:**
+**동작.**
 
 - GitHub에서 `action.yml` 가져오기
 - 입력, 출력, 메타데이터 파싱
@@ -180,13 +180,13 @@ gaji add docker/setup-buildx-action@v3
 gaji clean [옵션]
 ```
 
-**옵션:**
+**옵션.**
 
 | 옵션 | 설명 |
 |------|------|
 | `--cache` | 캐시도 함께 정리 |
 
-**예제:**
+**예제.**
 
 ```bash
 # 생성된 파일 정리
@@ -196,10 +196,10 @@ gaji clean
 gaji clean --cache
 ```
 
-**동작:**
+**동작.**
 
 - `generated/` 디렉토리 제거
-- `--cache` 사용 시: `.gaji-cache.json`도 제거
+- `--cache` 사용 시. `.gaji-cache.json`도 제거
 
 모든 타입을 처음부터 다시 생성하고 싶을 때 사용합니다.
 
@@ -249,13 +249,13 @@ gaji dev
 ### 개발
 
 ```bash
-# 터미널 1: 감시 모드
+# 터미널 1. 감시 모드
 gaji dev --watch
 
-# 터미널 2: 워크플로우 편집
+# 터미널 2. 워크플로우 편집
 # (workflows/ci.ts 편집)
 
-# 터미널 2: 빌드
+# 터미널 2. 빌드
 gaji build
 ```
 
@@ -286,7 +286,7 @@ gaji build
 
 ### `GITHUB_TOKEN`
 
-인증된 API 요청을 위한 GitHub 토큰 설정 (rate limit 증가):
+인증된 API 요청을 위한 GitHub 토큰 설정 (rate limit 증가).
 
 ```bash
 export GITHUB_TOKEN=ghp_your_token_here
@@ -301,7 +301,7 @@ gaji dev
 
 ### "Action not found"
 
-액션 참조가 올바른지 확인하세요:
+액션 참조가 올바른지 확인하세요.
 
 ```bash
 # ✅ 올바름
@@ -313,19 +313,18 @@ gaji add checkout  # owner와 버전이 누락됨
 
 ### "Network error"
 
-인터넷 연결을 확인하세요. 프록시 뒤에 있다면 설정하세요:
+인터넷 연결을 확인하세요. 프록시 뒤에 있다면 설정하세요. reqwest 크레이트에 환경변수를 인식합니다.
 
 ```bash
-export HTTP_PROXY=http://proxy.example.com:8080
-export HTTPS_PROXY=http://proxy.example.com:8080
+export HTTP_PROXY=http.//proxy.example.com.8080
+export HTTPS_PROXY=http.//proxy.example.com.8080
 ```
 
 ### "Types not generated"
 
-액션 추가 후 `gaji dev`를 실행했는지 확인하세요:
+액션 추가 후 `gaji dev`를 실행했는지 확인하세요.
 
 ```bash
-gaji add actions/checkout@v5
 gaji dev  # 잊지 마세요!
 ```
 

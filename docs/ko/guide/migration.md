@@ -4,13 +4,14 @@
 
 ## 자동 마이그레이션
 
-gaji는 기존 YAML 워크플로우를 자동으로 TypeScript로 변환할 수 있습니다:
+gaji는 기존 YAML 워크플로우를 자동으로 TypeScript로 변환할 수 있습니다.
 
 ```bash
 gaji init --migrate
 ```
 
-이것은:
+다음 순서로 진행됩니다.
+
 1. `.github/workflows/`에서 기존 YAML 워크플로우 감지
 2. `workflows/`에서 TypeScript로 변환
 3. 원본 YAML 파일 백업 (`.yml.backup`)
@@ -18,13 +19,13 @@ gaji init --migrate
 
 ## 액션 마이그레이션
 
-gaji는 로컬 액션(`.github/actions/*/action.yml`)도 TypeScript로 마이그레이션합니다:
+gaji는 로컬 액션(`.github/actions/*/action.yml`)도 TypeScript로 마이그레이션합니다.
 
 ```bash
 gaji init --migrate
 ```
 
-워크플로우와 액션을 자동으로 감지합니다. `runs.using` 필드에 따라 `CompositeAction` 또는 `JavaScriptAction` 클래스로 변환됩니다.
+워크플로우와 액션을 자동으로 감지합니다. `runs.using` 필드에 따라 `CompositeAction`, `JavaScriptAction`, `DockerAction` 클래스로 변환됩니다.
 
 ### 컴포지트 액션
 
@@ -152,21 +153,70 @@ const action = new JavaScriptAction(
 action.build("notify");
 ```
 
+### Docker 액션
+
+**변환 전** (`.github/actions/lint/action.yml`):
+
+```yaml
+name: Lint
+description: Run linter in Docker
+inputs:
+  config:
+    description: Config file path
+    required: false
+    default: ".lintrc"
+runs:
+  using: docker
+  image: Dockerfile
+  entrypoint: entrypoint.sh
+  args:
+    - --config
+    - ${{ inputs.config }}
+```
+
+**변환 후** (`workflows/action-lint.ts`):
+
+```typescript
+import { DockerAction } from "../generated/index.js";
+
+const action = new DockerAction(
+    {
+        name: "Lint",
+        description: "Run linter in Docker",
+        inputs: {
+            config: {
+                description: "Config file path",
+                required: false,
+                default: ".lintrc",
+            },
+        },
+    },
+    {
+        using: "docker",
+        image: "Dockerfile",
+        entrypoint: "entrypoint.sh",
+        args: ["--config", "${{ inputs.config }}"],
+    },
+);
+
+action.build("lint");
+```
+
 ### 지원되는 액션 타입
 
-| 타입       | `runs.using`                 | 변환 대상                            |
-| ---------- | ---------------------------- | ------------------------------------ |
-| Composite  | `composite`                  | `CompositeAction`                    |
-| JavaScript | `node12`, `node16`, `node20` | `JavaScriptAction`                   |
-| Docker     | `docker`                     | 미지원 (경고와 함께 건너뜀)          |
+| 타입       | `runs.using`                 | 변환 대상           |
+| ---------- | ---------------------------- | ------------------- |
+| Composite  | `composite`                  | `CompositeAction`   |
+| JavaScript | `node12`, `node16`, `node20` | `JavaScriptAction`  |
+| Docker     | `docker`                     | `DockerAction`      |
 
 ## 수동 마이그레이션
 
-수동으로 마이그레이션하려면 다음 단계를 따르세요:
+수동으로 마이그레이션하려면 다음 과정을 따르세요.
 
 ### 1단계: YAML 분석
 
-간단한 YAML 워크플로우로 시작:
+간단한 YAML 워크플로우를 예시로 들겠습니다.
 
 ```yaml
 name: CI
@@ -231,9 +281,6 @@ workflow.build("ci");
 ```bash
 # TypeScript를 YAML로 빌드
 gaji build
-
-# 원본과 비교
-diff .github/workflows/ci.yml .github/workflows/ci.yml.backup
 ```
 
 ## 다음 단계

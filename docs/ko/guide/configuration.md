@@ -4,7 +4,7 @@
 
 ## 설정 파일
 
-프로젝트 루트에 `.gaji.toml` 생성:
+프로젝트 루트에 `.gaji.toml` 생성합시다. `gaji init` 을 통해 빠르게 생성할 수 있습니다.
 
 ```toml
 [project]
@@ -58,6 +58,7 @@ GitHub API 설정:
 | `api_url` | string (선택) | `"https://github.com"` | GitHub 기본 URL (Enterprise용) |
 
 **토큰 우선순위:**
+
 1. `GITHUB_TOKEN` 환경 변수 (최우선)
 2. `.gaji.local.toml`의 `token`
 3. `.gaji.toml`의 `token`
@@ -71,6 +72,7 @@ api_url = "https://github.example.com"
 ```
 
 **설정 가능한 항목:**
+
 - **GitHub 토큰**: API 요청 인증 (rate limit 증가, 프라이빗 저장소 접근)
 - **GitHub Enterprise**: 자체 호스팅 GitHub 인스턴스 지정
 - **액션 가져오기**: 프라이빗 또는 엔터프라이즈 GitHub에서 `action.yml` 가져오기
@@ -123,7 +125,7 @@ format = true
 
 ## TypeScript 설정
 
-gaji는 표준 TypeScript 설정과 호환됩니다. `tsconfig.json`에 생성된 타입이 포함되도록 설정하세요:
+gaji는 표준 TypeScript 설정과 호환됩니다. `tsconfig.json`에 생성된 타입이 포함되도록 설정하세요.
 
 ```json
 {
@@ -159,21 +161,10 @@ generated/
 
 gaji는 액션 정의를 다시 가져오지 않도록 캐시 파일(`.gaji-cache.json`)을 사용합니다. 이 파일은 자동으로 관리되며 gitignore에 추가해야 합니다.
 
-캐시를 지우려면:
+캐시를 지우려면면 `clean` 명령어를 사용하세요.
 
 ```bash
 gaji clean --cache
-```
-
-## 환경 변수
-
-### `GITHUB_TOKEN`
-
-인증된 요청을 위한 GitHub 토큰 설정 (rate limit 증가):
-
-```bash
-export GITHUB_TOKEN=ghp_your_token_here
-gaji dev
 ```
 
 ## 다음 단계

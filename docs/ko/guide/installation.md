@@ -8,8 +8,6 @@ gaji는 QuickJS를 내장하고 있어 Node.js나 외부 JavaScript 런타임을
 
 ## npm
 
-npm으로 gaji 설치:
-
 ```bash
 npm install -D gaji
 ```
@@ -46,61 +44,67 @@ gaji --help
 
 ## 바이너리 다운로드
 
-[GitHub Releases](https://github.com/dodok8/gaji/releases)에서 미리 빌드된 바이너리 다운로드:
+[GitHub Releases](https://github.com/dodok8/gaji/releases)에서 미리 빌드된 바이너리를 다운로드합니다.
 
 ### Linux (x64)
+
 ```bash
 curl -L https://github.com/dodok8/gaji/releases/latest/download/gaji-linux-x64.tar.gz | tar xz
 sudo mv gaji /usr/local/bin/
 ```
 
 ### macOS (ARM64)
+
 ```bash
 curl -L https://github.com/dodok8/gaji/releases/latest/download/gaji-darwin-arm64.tar.gz | tar xz
 sudo mv gaji /usr/local/bin/
 ```
 
 ### macOS (x64)
+
 ```bash
 curl -L https://github.com/dodok8/gaji/releases/latest/download/gaji-darwin-x64.tar.gz | tar xz
 sudo mv gaji /usr/local/bin/
 ```
 
 ### Windows
+
 릴리스 페이지에서 `gaji-win32-x64.tar.gz`를 다운로드하고 PATH의 디렉토리에 압축을 풉니다.
 
 ## 설치 확인
 
-gaji가 올바르게 설치되었는지 확인:
-
 ```bash
-gaji --version
+gaji --version #가지 버전이 출력됩니다.
 ```
 
 ## 요구사항
 
 gaji는 **런타임 의존성이 없습니다**:
 
-- ✅ **Node.js 불필요** - gaji는 QuickJS를 내장하고 있습니다
-- ✅ **외부 JavaScript 런타임 불필요** - 완전히 독립적입니다
-- ✅ **어떤 언어나 빌드 도구와도 함께 작동**
+- ✅ Node.js 불필요 — gaji는 QuickJS를 내장하고 있습니다
+- ✅ 외부 JavaScript 런타임 불필요
+- ✅ 어떤 언어나 빌드 도구와도 함께 작동
 
 npm으로 설치하는 경우에만 패키지 매니저가 필요합니다:
+
 - **npm/pnpm/yarn** (npm 설치 시에만)
 
 ## 업데이트
 
 ### npm
+
 ```bash
 npm update gaji
 ```
 
 ### Cargo
+
 ```bash
 cargo install gaji --force
 ```
 
 ### 바이너리
+
 GitHub Releases에서 최신 버전을 다운로드하여 바이너리를 교체합니다.
 
 ## 다음 단계

@@ -1,6 +1,6 @@
 # TypeScript API Reference
 
-Complete reference for gaji's TypeScript API.
+Reference for gaji's TypeScript API.
 
 ## Core Classes
 
@@ -22,7 +22,7 @@ class Workflow {
 |--------|-------------|
 | `addJob(id, job)` | Add a job to the workflow. Accepts `Job`, `CompositeJob`, or `CallJob`. |
 | `fromObject(def, id?)` | Create a Workflow from a raw `WorkflowDefinition` object. Useful for wrapping existing YAML-like definitions. |
-| `build(filename?)` | Compile and output the workflow as YAML. |
+| `build(filename?)` | Compile the workflow to YAML. |
 | `toJSON()` | Serialize to a `WorkflowDefinition` object. |
 
 #### `WorkflowConfig`
@@ -146,7 +146,7 @@ const job = new Job("ubuntu-latest")
 
 ### `CompositeAction`
 
-Create reusable composite actions.
+Create reusable [composite actions](https://docs.github.com/en/actions/sharing-automations/creating-actions/creating-a-composite-action).
 
 ```typescript
 class CompositeAction {
@@ -219,7 +219,7 @@ const job = new Job("ubuntu-latest")
 
 ### `JavaScriptAction`
 
-Create Node.js-based GitHub Actions.
+Create [Node.js-based GitHub Actions](https://docs.github.com/en/actions/sharing-automations/creating-actions/creating-a-javascript-action).
 
 ```typescript
 class JavaScriptAction {
@@ -295,6 +295,87 @@ const step = {
   ...CallAction.from(action).toJSON(),
   with: { "who-to-greet": "Mona the Octocat" },
 };
+```
+
+---
+
+### `DockerAction`
+
+Create [Docker container actions](https://docs.github.com/en/actions/sharing-automations/creating-actions/creating-a-docker-container-action).
+
+```typescript
+class DockerAction {
+  constructor(config: DockerActionConfig, runs: DockerActionRuns)
+  build(filename: string): void
+}
+```
+
+#### `DockerActionConfig`
+
+```typescript
+interface DockerActionConfig {
+  name: string
+  description: string
+  inputs?: Record<string, ActionInputDefinition>
+  outputs?: Record<string, ActionOutputDefinition>
+}
+```
+
+#### `DockerActionRuns`
+
+```typescript
+interface DockerActionRuns {
+  using: 'docker'
+  image: string
+  entrypoint?: string
+  args?: string[]
+  env?: Record<string, string>
+  'pre-entrypoint'?: string
+  'post-entrypoint'?: string
+  'pre-if'?: string
+  'post-if'?: string
+}
+```
+
+#### Example
+
+```ts twoslash
+// @noErrors
+// @filename: workflows/example.ts
+// ---cut---
+import { DockerAction } from "../generated/index.js";
+
+const action = new DockerAction(
+  {
+    name: "Greeting",
+    description: "Docker-based greeter",
+    inputs: {
+      name: {
+        description: "Who to greet",
+        required: true,
+        default: "World",
+      },
+    },
+  },
+  {
+    using: "docker",
+    image: "Dockerfile",
+    args: ["${{ inputs.name }}"],
+  },
+);
+
+action.build("greeting");
+```
+
+This generates `.github/actions/greeting/action.yml`.
+
+To use a Docker Hub image directly, prefix `image` with `docker://`:
+
+```typescript
+{
+  using: "docker",
+  image: "docker://alpine:3.19",
+}
 ```
 
 ---
@@ -456,14 +537,14 @@ Reference a local composite or JavaScript action built by gaji, for use as a ste
 ```typescript
 class CallAction {
   constructor(uses: string)
-  static from(action: CompositeAction | JavaScriptAction): CallAction
+  static from(action: CompositeAction | JavaScriptAction | DockerAction): CallAction
   toJSON(): Step
 }
 ```
 
 | Method | Description |
 |--------|-------------|
-| `from(action)` | Create a `CallAction` from a `CompositeAction` or `JavaScriptAction` instance. Automatically resolves the `.github/actions/<id>` path. |
+| `from(action)` | Create a `CallAction` from a `CompositeAction`, `JavaScriptAction`, or `DockerAction` instance. Automatically resolves the `.github/actions/<id>` path. |
 
 #### Example
 

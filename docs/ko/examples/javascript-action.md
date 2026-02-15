@@ -12,17 +12,17 @@ import { JavaScriptAction } from "../generated/index.js";
 const action = new JavaScriptAction(
   {
     name: "Hello World",
-    description: "인사하고 시간을 기록합니다",
+    description: "Greet someone and record the time",
     inputs: {
       "who-to-greet": {
-        description: "인사할 대상",
+        description: "Who to greet",
         required: true,
         default: "World",
       },
     },
     outputs: {
       time: {
-        description: "인사한 시간",
+        description: "The time we greeted you",
       },
     },
   },
@@ -54,17 +54,17 @@ import { CallAction, JavaScriptAction, Job, Workflow } from "../generated/index.
 const action = new JavaScriptAction(
   {
     name: "Hello World",
-    description: "인사하고 시간을 기록합니다",
+    description: "Greet someone and record the time",
     inputs: {
       "who-to-greet": {
-        description: "인사할 대상",
+        description: "Who to greet",
         required: true,
         default: "World",
       },
     },
     outputs: {
       time: {
-        description: "인사한 시간",
+        description: "The time we greeted you",
       },
     },
   },
@@ -79,7 +79,7 @@ action.build("hello-world");
 // 워크플로우에서 액션 사용
 const helloWorldJob = new Job("ubuntu-latest")
   .addStep({
-    name: "Hello world 액션 스텝",
+    name: "Hello world action step",
     id: "hello",
     ...CallAction.from(action).toJSON(),
     with: {
@@ -87,7 +87,7 @@ const helloWorldJob = new Job("ubuntu-latest")
     },
   })
   .addStep({
-    name: "출력 시간 확인",
+    name: "Get the output time",
     run: 'echo "The time was ${{ steps.hello.outputs.time }}"',
   });
 
@@ -113,7 +113,7 @@ JavaScript 액션은 라이프사이클 훅을 지원합니다:
 const action = new JavaScriptAction(
   {
     name: "Setup and Cleanup",
-    description: "pre/post 스크립트가 있는 액션",
+    description: "Action with pre and post scripts",
   },
   {
     using: "node20",
@@ -133,7 +133,7 @@ action.build("setup-cleanup");
 
 ```typescript
 const step = {
-  name: "내 액션 실행",
+  name: "Run my action",
   id: "my-step",
   ...CallAction.from(action).toJSON(),
   with: { input1: "value1" },

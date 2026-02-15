@@ -1,26 +1,22 @@
 # 빠른 시작
 
-이 가이드는 몇 분 안에 gaji를 시작하는 방법을 안내합니다.
+이 가이드는 초기 설정과 첫 워크플로우 작성을 다룹니다.
 
 ## 설치
 
-npm을 사용하여 gaji 설치 (권장):
+Node 계열 프로젝트는 자신의 패키지 매니저에 맞게, 다른 언어나 환경을 사용하는 경우 cargo나 `npm install --global`을 사용해서 설치해주세요.
 
 ```bash
 npm install -D gaji
-```
-
-또는 다른 방법 사용:
-
-```bash
-# cargo 사용
-cargo install gaji
 
 # pnpm 사용
 pnpm add -D gaji
 
 # yarn 사용
 yarn add -D gaji
+
+# cargo 사용
+cargo install gaji
 ```
 
 더 많은 옵션은 [설치](./installation.md)를 참조하세요.
@@ -70,20 +66,20 @@ const setupNode = getAction("actions/setup-node@v4");
 // 빌드 작업 정의
 const build = new Job("ubuntu-latest")
   .addStep(checkout({
-    name: "코드 체크아웃",
+    name: "Checkout code",
   }))
   .addStep(setupNode({
-    name: "Node.js 설정",
+    name: "Setup Node.js",
     with: {
       "node-version": "20",  // ✅ 자동완성 사용 가능!
     },
   }))
   .addStep({
-    name: "의존성 설치",
+    name: "Install dependencies",
     run: "npm ci",
   })
   .addStep({
-    name: "테스트 실행",
+    name: "Run tests",
     run: "npm test",
   });
 
@@ -142,15 +138,15 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - name: 코드 체크아웃
+      - name: Checkout code
         uses: actions/checkout@v5
-      - name: Node.js 설정
+      - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '20'
-      - name: 의존성 설치
+      - name: Install dependencies
         run: npm ci
-      - name: 테스트 실행
+      - name: Run tests
         run: npm test
 ```
 
@@ -159,9 +155,11 @@ jobs:
 최상의 경험을 위해 다음 워크플로우를 따르세요:
 
 1. **감시 모드 시작**:
+
    ```bash
    gaji init dev --watch
    ```
+
    터미널에서 계속 실행 상태로 두세요.
 
 2. **워크플로우 편집**:
@@ -170,6 +168,7 @@ jobs:
    - `getAction()`으로 새 액션을 추가하면 gaji가 자동으로 타입을 가져와 생성합니다
 
 3. **YAML로 빌드**:
+
    ```bash
    gaji init build
    ```
@@ -180,6 +179,7 @@ jobs:
    - 모든 필수 필드가 있는지 확인
 
 5. **두 파일 모두 커밋**:
+
    ```bash
    git add workflows/ci.ts .github/workflows/ci.yml
    git commit -m "CI 워크플로우 추가"
@@ -191,8 +191,6 @@ TypeScript 소스와 생성된 YAML을 **모두** 커밋해야 합니다:
 
 - **TypeScript** (`workflows/*.ts`): 소스 코드, 버전 관리
 - **YAML** (`.github/workflows/*.yml`): GitHub Actions가 실행하는 파일
-
-## 중요: 자동 컴파일
 
 ::: warning 중요
 push 시 TypeScript를 YAML로 자동 컴파일하는 워크플로우를 만들 수 있지만, **권장하지 않습니다**. 항상 로컬에서 컴파일하고 검토한 후 커밋하세요.

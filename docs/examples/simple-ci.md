@@ -87,21 +87,15 @@ jobs:
 
 ## Setup
 
-1. **Add required actions**:
+1. **Generate types**:
    ```bash
-   gaji add actions/checkout@v5
-   gaji add actions/setup-node@v4
+   gaji dev --watch
    ```
 
-2. **Generate types**:
-   ```bash
-   gaji dev
-   ```
-
-3. **Create workflow**:
+2. **Create workflow**:
    Create `workflows/ci.ts` with the code above.
 
-4. **Build**:
+3. **Build**:
    ```bash
    gaji build
    ```

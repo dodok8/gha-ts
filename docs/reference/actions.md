@@ -4,13 +4,13 @@ How to use GitHub Actions with gaji.
 
 ## Adding Actions
 
-To use an action in your workflows, first add it:
+To use an action in your workflow, fetch its `action.yml` and generate TypeScript types.
 
 ```bash
 gaji add actions/checkout@v5
 ```
 
-This fetches the action's `action.yml` and generates TypeScript types.
+You can also run `gaji dev --watch` and skip straight to the next step.
 
 ## Using Actions
 
@@ -66,12 +66,6 @@ Your editor shows all available inputs:
 ```typescript
 setupNode({
   with: {
-    // Press Ctrl+Space to see all options:
-    // - node-version
-    // - cache
-    // - cache-dependency-path
-    // - architecture
-    // etc.
   },
 })
 ```
@@ -98,7 +92,7 @@ setupNode({
 
 ### Documentation
 
-Hover over inputs to see descriptions and default values:
+Hover over inputs to see descriptions and default values.
 
 ```typescript
 setupNode({
@@ -264,7 +258,7 @@ Make sure to create the action first. See [CompositeAction](./api.md#compositeac
 
 ## Action Outputs
 
-Use action outputs in subsequent steps:
+Use action outputs in subsequent steps.
 
 ```typescript
 const setupNode = getAction("actions/setup-node@v4");
@@ -282,7 +276,7 @@ const setupNode = getAction("actions/setup-node@v4");
 
 ## Updating Actions
 
-To update action types, clear the cache and regenerate:
+To update action types, clear the cache and regenerate.
 
 ```bash
 # Clear cache and regenerate
@@ -294,7 +288,7 @@ gaji dev
 
 ### "Action not found"
 
-Make sure you've added the action:
+Make sure you've added the action.
 
 ```bash
 gaji add actions/checkout@v5
@@ -303,7 +297,7 @@ gaji dev
 
 ### "Types not updated"
 
-Clear cache and regenerate:
+Clear cache and regenerate.
 
 ```bash
 gaji clean
@@ -312,7 +306,7 @@ gaji dev
 
 ### "Rate limit exceeded"
 
-Set a GitHub token:
+Set a GitHub token.
 
 ```bash
 export GITHUB_TOKEN=ghp_your_token_here

@@ -12,7 +12,7 @@ Initialize a new gaji project.
 gaji init [OPTIONS]
 ```
 
-**Options:**
+**Options.**
 
 | Option | Description |
 |--------|-------------|
@@ -21,7 +21,7 @@ gaji init [OPTIONS]
 | `--migrate` | Migrate existing YAML workflows to TypeScript |
 | `-i, --interactive` | Interactive mode with prompts |
 
-**Examples:**
+**Examples.**
 
 ```bash
 # Basic initialization
@@ -37,7 +37,7 @@ gaji init --interactive
 gaji init --force
 ```
 
-**What it does:**
+**What it does.**
 
 - Creates `workflows/` directory
 - Creates `generated/` directory
@@ -56,14 +56,14 @@ Analyze workflow files and generate types for actions.
 gaji dev [OPTIONS]
 ```
 
-**Options:**
+**Options.**
 
 | Option | Description |
 |--------|-------------|
-| `-d, --dir <DIR>` | Directory to scan (default: `workflows`) |
+| `-d, --dir <DIR>` | Directory to scan (default. `workflows`) |
 | `--watch` | Keep watching for changes after initial scan |
 
-**Examples:**
+**Examples.**
 
 ```bash
 # One-time scan
@@ -76,7 +76,7 @@ gaji dev --watch
 gaji dev --dir src/workflows
 ```
 
-**What it does:**
+**What it does.**
 
 - Scans all `.ts` files in `workflows/`
 - Extracts `getAction()` calls
@@ -84,7 +84,7 @@ gaji dev --dir src/workflows
 - Generates TypeScript types in `generated/`
 - Updates cache (`.gaji-cache.json`)
 
-**Watch Mode:**
+**Watch Mode.**
 
 In watch mode, gaji continuously monitors your workflow files. When you add a new action with `getAction()`, types are automatically generated.
 
@@ -98,15 +98,15 @@ Build TypeScript workflows to YAML.
 gaji build [OPTIONS]
 ```
 
-**Options:**
+**Options.**
 
 | Option | Description |
 |--------|-------------|
-| `-i, --input <DIR>` | Input directory containing TypeScript workflows (default: `workflows`) |
-| `-o, --output <DIR>` | Output directory for YAML files (default: `.github`) |
+| `-i, --input <DIR>` | Input directory containing TypeScript workflows (default. `workflows`) |
+| `-o, --output <DIR>` | Output directory for YAML files (default. `.github`) |
 | `--dry-run` | Preview YAML output without writing files |
 
-**Examples:**
+**Examples.**
 
 ```bash
 # Build all workflows
@@ -123,7 +123,7 @@ gaji build --input src/workflows --output .github
 Validation and formatting options are configured via `.gaji.toml`, not CLI flags. See [Configuration](../guide/configuration.md).
 :::
 
-**What it does:**
+**What it does.**
 
 - Finds all `.ts` files in `workflows/`
 - Executes them with the built-in QuickJS engine (falls back to `npx tsx`)
@@ -141,13 +141,13 @@ Add a GitHub Action and generate types.
 gaji add <ACTION_REF>
 ```
 
-**Arguments:**
+**Arguments.**
 
 | Argument | Description |
 |----------|-------------|
 | `<ACTION_REF>` | GitHub action reference (e.g., `actions/checkout@v5`) |
 
-**Examples:**
+**Examples.**
 
 ```bash
 # Add common actions
@@ -162,7 +162,7 @@ gaji add softprops/action-gh-release@v1
 gaji add docker/setup-buildx-action@v3
 ```
 
-**What it does:**
+**What it does.**
 
 - Fetches `action.yml` from GitHub
 - Parses inputs, outputs, and metadata
@@ -180,13 +180,13 @@ Clean generated files and optionally clean cache.
 gaji clean [OPTIONS]
 ```
 
-**Options:**
+**Options.**
 
 | Option | Description |
 |--------|-------------|
 | `--cache` | Also clean cache |
 
-**Examples:**
+**Examples.**
 
 ```bash
 # Clean generated files
@@ -196,10 +196,10 @@ gaji clean
 gaji clean --cache
 ```
 
-**What it does:**
+**What it does.**
 
 - Removes `generated/` directory
-- With `--cache`: also removes `.gaji-cache.json`
+- With `--cache`. also removes `.gaji-cache.json`
 
 Use this when you want to regenerate all types from scratch.
 
@@ -249,13 +249,13 @@ gaji dev
 ### Development
 
 ```bash
-# Terminal 1: Watch mode
+# Terminal 1. Watch mode
 gaji dev --watch
 
-# Terminal 2: Edit workflows
+# Terminal 2. Edit workflows
 # (edit workflows/ci.ts)
 
-# Terminal 2: Build
+# Terminal 2. Build
 gaji build
 ```
 
@@ -286,7 +286,7 @@ gaji build
 
 ### `GITHUB_TOKEN`
 
-Set a GitHub token for authenticated API requests (increases rate limits):
+Set a GitHub token for authenticated API requests (increases rate limits).
 
 ```bash
 export GITHUB_TOKEN=ghp_your_token_here
@@ -301,7 +301,7 @@ Commands respect settings in `.gaji.toml`. See [Configuration](../guide/configur
 
 ### "Action not found"
 
-Make sure the action reference is correct:
+Make sure the action reference is correct.
 
 ```bash
 # ✅ Correct
@@ -313,7 +313,7 @@ gaji add checkout  # Missing owner and version
 
 ### "Network error"
 
-Check your internet connection. If you're behind a proxy, configure it:
+Check your internet connection. If you're behind a proxy, configure it. The reqwest crate recognizes these environment variables.
 
 ```bash
 export HTTP_PROXY=http://proxy.example.com:8080
@@ -322,10 +322,9 @@ export HTTPS_PROXY=http://proxy.example.com:8080
 
 ### "Types not generated"
 
-Make sure you've run `gaji dev` after adding actions:
+Make sure you've run `gaji dev` after adding actions.
 
 ```bash
-gaji add actions/checkout@v5
 gaji dev  # Don't forget this!
 ```
 

@@ -19,27 +19,27 @@ const test = new Job("${{ matrix.os }}")
     },
   })
   .addStep(checkout({
-    name: "코드 체크아웃",
+    name: "Checkout code",
   }))
   .addStep(setupNode({
-    name: "Node.js ${{ matrix.node }} 설정",
+    name: "Setup Node.js ${{ matrix.node }}",
     with: {
       "node-version": "${{ matrix.node }}",
       cache: "npm",
     },
   }))
   .addStep({
-    name: "의존성 설치",
+    name: "Install dependencies",
     run: "npm ci",
   })
   .addStep({
-    name: "테스트 실행",
+    name: "Run tests",
     run: "npm test",
   });
 
 // 워크플로우 생성
 const workflow = new Workflow({
-  name: "매트릭스 테스트",
+  name: "Matrix Test",
   on: {
     push: {
       branches: ["main"],

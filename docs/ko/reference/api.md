@@ -1,12 +1,12 @@
 # TypeScript API 레퍼런스
 
-gaji의 TypeScript API에 대한 완전한 레퍼런스입니다.
+gaji의 TypeScript API에 대한 레퍼런스입니다.
 
 ## 핵심 클래스
 
 ### `Workflow`
 
-GitHub Actions 워크플로우를 나타냅니다.
+GitHub Actions 워크플로우를 표현합니다.
 
 ```typescript
 class Workflow {
@@ -22,7 +22,7 @@ class Workflow {
 |--------|------|
 | `addJob(id, job)` | 워크플로우에 job을 추가합니다. `Job`, `CompositeJob`, `CallJob`을 받습니다. |
 | `fromObject(def, id?)` | `WorkflowDefinition` 객체로부터 Workflow를 생성합니다. 기존 YAML 형태의 정의를 래핑할 때 유용합니다. |
-| `build(filename?)` | 워크플로우를 YAML로 컴파일하여 출력합니다. |
+| `build(filename?)` | 워크플로우를 YAML로 컴파일합니다. |
 | `toJSON()` | `WorkflowDefinition` 객체로 직렬화합니다. |
 
 #### `WorkflowConfig`
@@ -146,7 +146,7 @@ const job = new Job("ubuntu-latest")
 
 ### `CompositeAction`
 
-재사용 가능한 컴포지트 액션을 만듭니다.
+재사용 가능한 [컴포지트 액션](https://docs.github.com/en/actions/sharing-automations/creating-actions/creating-a-composite-action)을 만듭니다.
 
 ```typescript
 class CompositeAction {
@@ -176,11 +176,11 @@ interface CompositeActionConfig {
 import { CompositeAction } from "../generated/index.js";
 
 const setupEnv = new CompositeAction({
-  name: "환경 설정",
-  description: "Node.js 설정 및 의존성 설치",
+  name: "Setup Environment",
+  description: "Setup Node.js and install dependencies",
   inputs: {
     "node-version": {
-      description: "Node.js 버전",
+      description: "Node.js version",
       required: true,
       default: "20",
     },
@@ -217,7 +217,7 @@ const job = new Job("ubuntu-latest")
 
 ### `JavaScriptAction`
 
-Node.js 기반 GitHub Actions를 만듭니다.
+[Node.js 기반 GitHub Actions](https://docs.github.com/en/actions/sharing-automations/creating-actions/creating-a-javascript-action)를 만듭니다.
 
 ```typescript
 class JavaScriptAction {
@@ -260,17 +260,17 @@ import { JavaScriptAction } from "../generated/index.js";
 const action = new JavaScriptAction(
   {
     name: "Hello World",
-    description: "인사하고 시간을 기록합니다",
+    description: "Greet someone and record the time",
     inputs: {
       "who-to-greet": {
-        description: "인사할 대상",
+        description: "Who to greet",
         required: true,
         default: "World",
       },
     },
     outputs: {
       time: {
-        description: "인사한 시간",
+        description: "The time we greeted you",
       },
     },
   },
@@ -293,6 +293,87 @@ const step = {
   ...CallAction.from(action).toJSON(),
   with: { "who-to-greet": "Mona the Octocat" },
 };
+```
+
+---
+
+### `DockerAction`
+
+[Docker 컨테이너 액션](https://docs.github.com/en/actions/sharing-automations/creating-actions/creating-a-docker-container-action)을 만듭니다.
+
+```typescript
+class DockerAction {
+  constructor(config: DockerActionConfig, runs: DockerActionRuns)
+  build(filename: string): void
+}
+```
+
+#### `DockerActionConfig`
+
+```typescript
+interface DockerActionConfig {
+  name: string
+  description: string
+  inputs?: Record<string, ActionInputDefinition>
+  outputs?: Record<string, ActionOutputDefinition>
+}
+```
+
+#### `DockerActionRuns`
+
+```typescript
+interface DockerActionRuns {
+  using: 'docker'
+  image: string
+  entrypoint?: string
+  args?: string[]
+  env?: Record<string, string>
+  'pre-entrypoint'?: string
+  'post-entrypoint'?: string
+  'pre-if'?: string
+  'post-if'?: string
+}
+```
+
+#### 예제
+
+```ts twoslash
+// @noErrors
+// @filename: workflows/example.ts
+// ---cut---
+import { DockerAction } from "../generated/index.js";
+
+const action = new DockerAction(
+  {
+    name: "Greeting",
+    description: "Docker-based greeter",
+    inputs: {
+      name: {
+        description: "Who to greet",
+        required: true,
+        default: "World",
+      },
+    },
+  },
+  {
+    using: "docker",
+    image: "Dockerfile",
+    args: ["${{ inputs.name }}"],
+  },
+);
+
+action.build("greeting");
+```
+
+`.github/actions/greeting/action.yml`이 생성됩니다.
+
+Docker Hub 이미지를 직접 사용하려면 `image`에 `docker://` 접두사를 붙입니다:
+
+```typescript
+{
+  using: "docker",
+  image: "docker://alpine:3.19",
+}
 ```
 
 ---
@@ -338,7 +419,7 @@ class NodeTestJob extends CompositeJob {
 
 // 워크플로우에서 사용
 const workflow = new Workflow({
-  name: "테스트 매트릭스",
+  name: "Test Matrix",
   on: { push: { branches: ["main"] } },
 })
   .addJob("test-node-18", new NodeTestJob("18"))
@@ -363,7 +444,7 @@ class DeployJob extends CompositeJob {
       .addStep(checkout({}))
       .addStep(setupNode({ with: { "node-version": "20" } }))
       .addStep({
-        name: "배포",
+        name: "Deploy",
         run: `npm run deploy:${environment}`,
         env: {
           DEPLOY_TOKEN: "${{ secrets.DEPLOY_TOKEN }}",
@@ -374,7 +455,7 @@ class DeployJob extends CompositeJob {
 
 // 워크플로우에서 사용
 const workflow = new Workflow({
-  name: "배포",
+  name: "Deploy",
   on: { push: { tags: ["v*"] } },
 })
   .addJob("deploy-staging", new DeployJob("staging"))
@@ -450,14 +531,14 @@ gaji로 빌드한 로컬 composite 또는 JavaScript 액션을 job의 스텝으�
 ```typescript
 class CallAction {
   constructor(uses: string)
-  static from(action: CompositeAction | JavaScriptAction): CallAction
+  static from(action: CompositeAction | JavaScriptAction | DockerAction): CallAction
   toJSON(): Step
 }
 ```
 
 | 메서드 | 설명 |
 |--------|------|
-| `from(action)` | `CompositeAction` 또는 `JavaScriptAction` 인스턴스로부터 `CallAction`을 생성합니다. `.github/actions/<id>` 경로를 자동으로 해석합니다. |
+| `from(action)` | `CompositeAction`, `JavaScriptAction`, `DockerAction` 인스턴스로부터 `CallAction`을 생성합니다. `.github/actions/<id>` 경로를 자동으로 해석합니다. |
 
 #### 예제
 
@@ -468,7 +549,7 @@ import { CompositeAction, CallAction, Job } from "../generated/index.js";
 
 const setupEnv = new CompositeAction({
   name: "Setup",
-  description: "환경 설정",
+  description: "Setup environment",
 });
 setupEnv.build("setup-env");
 
@@ -501,7 +582,7 @@ const setupNode = getAction("actions/setup-node@v4");
 
 // 완전한 타입 안전성으로 사용
 const step = checkout({
-  name: "코드 체크아웃",
+  name: "Checkout code",
   with: {
     // ✅ 자동완성 사용 가능!
     repository: "owner/repo",

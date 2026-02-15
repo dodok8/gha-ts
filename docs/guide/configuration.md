@@ -4,7 +4,7 @@ gaji can be configured using a `.gaji.toml` file in your project root.
 
 ## Configuration File
 
-Create `.gaji.toml` in your project root:
+Create `.gaji.toml` in your project root. You can quickly generate one with `gaji init`.
 
 ```toml
 [project]
@@ -58,6 +58,7 @@ GitHub API settings:
 | `api_url` | string (optional) | `"https://github.com"` | GitHub base URL (for Enterprise) |
 
 **Token Priority:**
+
 1. `GITHUB_TOKEN` environment variable (highest priority)
 2. `token` in `.gaji.local.toml`
 3. `token` in `.gaji.toml`
@@ -71,6 +72,7 @@ api_url = "https://github.example.com"
 ```
 
 **What you can configure:**
+
 - **GitHub token**: Authenticate API requests (increases rate limits, access private repos)
 - **GitHub Enterprise**: Point to your self-hosted GitHub instance
 - **Action fetching**: Retrieve `action.yml` from private or enterprise GitHub
@@ -123,7 +125,7 @@ format = true
 
 ## TypeScript Configuration
 
-gaji works with standard TypeScript configuration. Make sure your `tsconfig.json` includes the generated types:
+gaji works with standard TypeScript configuration. Make sure your `tsconfig.json` includes the generated types.
 
 ```json
 {
@@ -159,21 +161,10 @@ generated/
 
 gaji uses a cache file (`.gaji-cache.json`) to avoid re-fetching action definitions. This file is automatically managed and should be gitignored.
 
-To clear the cache:
+To clear the cache, use the `clean` command.
 
 ```bash
 gaji clean --cache
-```
-
-## Environment Variables
-
-### `GITHUB_TOKEN`
-
-Set a GitHub token for authenticated requests (increases rate limits):
-
-```bash
-export GITHUB_TOKEN=ghp_your_token_here
-gaji dev
 ```
 
 ## Next Steps

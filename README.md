@@ -3,12 +3,16 @@
   <h1>gaji</h1>
   <p>Type-safe GitHub Actions workflows in TypeScript</p>
   <p><em>GitHub Actions Justified Improvements</em></p>
-  <p>🍆 Named after the Korean word "가지" (gaji, eggplant) - a versatile ingredient that makes everything better!</p>
+  <p>🍆 Named after the Korean word "가지" (gaji, eggplant) - a versatile vegetable</p>
+  <p>
+    <a href="https://crates.io/crates/gaji"><img src="https://img.shields.io/crates/v/gaji" alt="crates.io"></a>
+    <a href="https://www.npmjs.com/package/gaji"><img src="https://img.shields.io/npm/v/gaji" alt="npm"></a>
+  </p>
 </div>
 
 ## Overview
 
-`gaji` is a CLI tool that allows developers to write GitHub Actions workflows in TypeScript with full type safety, then compile them to YAML. It automatically fetches `action.yml` definitions and generates typed wrappers, so you get autocomplete and type checking for every action input and output.
+`gaji` is a CLI tool that allows developers to write GitHub Actions workflows in TypeScript with full type safety, then compile them to YAML. It automatically fetches `action.yml` definitions and generates typed wrappers, providing autocomplete and type checking for action inputs and outputs.
 
 ## Features
 
@@ -88,8 +92,6 @@ workflow.build("ci");
 Run `gaji build` and it outputs `.github/workflows/ci.yml`.
 
 ### Recommended Development Workflow
-
-For the best experience, follow this workflow:
 
 1. **Start watch mode**:
    ```bash
@@ -338,3 +340,15 @@ Check out the [examples/](examples/) directory for complete working examples:
 ## License
 
 MIT License
+
+## Special Thanks
+
+### gaji Brand
+
+- Name suggestions: [kiwiyou](https://github.com/kiwiyou), [RanolP](https://github.com/ranolp)
+- Logo design: [sij411](https://github.com/sij411)
+
+### Inspiration
+
+- Client Devops Team@Toss: Without the experience on this team, I would never have thought deeply about YAML and GitHub Actions. The product below was also introduced to me through a teammate.
+- [emmanuelnk/github-actions-workflow-ts](https://github.com/emmanuelnk/github-actions-workflow-ts): The idea of writing GitHub Actions in TypeScript came from here.

@@ -31,6 +31,10 @@ cargo fmt --all --check
 cargo fmt --all
 ```
 
+## Writing Docs
+
+Before Writing docs, See <https://en.wikipedia.org/wiki/Wikipedia:Signs_of_AI_writing> and avoid these patterns.
+
 ## Project Structure
 
 ```

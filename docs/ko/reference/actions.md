@@ -4,13 +4,13 @@ gaji와 함께 GitHub Actions를 사용하는 방법입니다.
 
 ## 액션 추가
 
-워크플로우에서 액션을 사용하려면 먼저 추가하세요:
+워크플로우에서 액션을 사용하려면 액션의 `action.yml`을 가져와 TypeScript 타입을 생성합니다.
 
 ```bash
 gaji add actions/checkout@v5
 ```
 
-이것은 액션의 `action.yml`을 가져와 TypeScript 타입을 생성합니다.
+`gaji dev --watch` 를 실행한 다음, 바로 다음 스텝으로 넘어가도 됩니다.
 
 ## 액션 사용
 
@@ -64,12 +64,6 @@ gaji는 액션의 `action.yml`에서 타입을 생성하여 다음을 제공합�
 ```typescript
 setupNode({
   with: {
-    // Ctrl+Space를 눌러 모든 옵션 보기:
-    // - node-version
-    // - cache
-    // - cache-dependency-path
-    // - architecture
-    // 등등.
   },
 })
 ```
@@ -96,7 +90,7 @@ setupNode({
 
 ### 문서
 
-입력 위에 마우스를 올리면 설명과 기본값을 볼 수 있습니다:
+입력 위에 마우스를 올리면 설명과 기본값을 볼 수 있습니다.
 
 ```typescript
 setupNode({
@@ -262,7 +256,7 @@ const myAction = getAction("./my-action");
 
 ## 액션 출력
 
-후속 스텝에서 액션 출력을 사용하세요:
+후속 스텝에서 액션 출력을 사용하세요.
 
 ```typescript
 const setupNode = getAction("actions/setup-node@v4");
@@ -280,7 +274,7 @@ const setupNode = getAction("actions/setup-node@v4");
 
 ## 액션 업데이트
 
-액션 타입을 업데이트하려면 캐시를 지우고 재생성하세요:
+액션 타입을 업데이트하려면 캐시를 지우고 재생성하세요.
 
 ```bash
 # 캐시 정리 후 재생성
@@ -292,7 +286,7 @@ gaji dev
 
 ### "Action not found"
 
-액션을 추가했는지 확인하세요:
+액션을 추가했는지 확인하세요.
 
 ```bash
 gaji add actions/checkout@v5
@@ -301,7 +295,7 @@ gaji dev
 
 ### "Types not updated"
 
-캐시를 지우고 재생성하세요:
+캐시를 지우고 재생성하세요.
 
 ```bash
 gaji clean --cache
@@ -310,7 +304,7 @@ gaji dev
 
 ### "Rate limit exceeded"
 
-GitHub 토큰을 설정하세요:
+GitHub 토큰을 설정하세요.
 
 ```bash
 export GITHUB_TOKEN=ghp_your_token_here
