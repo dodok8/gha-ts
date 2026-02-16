@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.0](https://github.com/dodok8/gaji/compare/v0.4.4...v0.5.0) - 2026-02-16
+
+### Added
+
+- unify dev/build CLI input flags to -i/--input ([#52](https://github.com/dodok8/gaji/pull/52))
+- add typed step outputs and job output passing ([#50](https://github.com/dodok8/gaji/pull/50))
+
 ## [0.4.4](https://github.com/dodok8/gaji/compare/v0.4.3...v0.4.4) - 2026-02-15
 
 ### Added
