@@ -636,7 +636,7 @@ async fn test_build_all_empty_directory() {
     let output_dir = dir.path().join("output");
     std::fs::create_dir_all(&input_dir).unwrap();
 
-    let builder = gaji::builder::WorkflowBuilder::new(input_dir, output_dir, false);
+    let builder = gaji::builder::WorkflowBuilder::new(vec![input_dir], output_dir, false);
     let result = builder.build_all().await.unwrap();
     assert!(result.is_empty());
 }

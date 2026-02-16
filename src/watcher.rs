@@ -1,4 +1,5 @@
-use std::path::Path;
+use std::collections::HashSet;
+use std::path::PathBuf;
 use std::sync::mpsc::channel;
 use std::time::{Duration, Instant};
 
@@ -13,25 +14,52 @@ use crate::parser;
 
 const DEBOUNCE_DURATION: Duration = Duration::from_millis(300);
 
-pub async fn watch_directory(dir: &Path) -> Result<()> {
-    println!("{} Watching {} for changes...", "👀".green(), dir.display());
+pub async fn watch_paths(paths: &[PathBuf]) -> Result<()> {
+    let display: Vec<String> = paths.iter().map(|p| p.display().to_string()).collect();
+    println!(
+        "{} Watching {} for changes...",
+        "👀".green(),
+        display.join(", ")
+    );
     println!("{}", "Press Ctrl+C to stop".dimmed());
 
-    // Load ignored patterns from config
     let gaji_config = GajiConfig::load()?;
     let ignored_patterns = gaji_config.watch.ignored_patterns.clone();
 
     let (tx, rx) = channel();
 
     let mut watcher = RecommendedWatcher::new(tx, Config::default())?;
-    watcher.watch(dir, RecursiveMode::Recursive)?;
 
+    // Track individually watched files for event filtering
+    let mut watched_files: HashSet<PathBuf> = HashSet::new();
+    let mut watched_parents: HashSet<PathBuf> = HashSet::new();
+
+    for path in paths {
+        if path.is_dir() {
+            watcher.watch(path, RecursiveMode::Recursive)?;
+        } else if path.is_file() {
+            let canonical = path.canonicalize().unwrap_or_else(|_| path.clone());
+            watched_files.insert(canonical);
+            if let Some(parent) = path.parent() {
+                let parent_buf = parent.to_path_buf();
+                // Only watch parent if not already covered by a directory watch
+                if !paths
+                    .iter()
+                    .any(|p| p.is_dir() && parent_buf.starts_with(p))
+                    && watched_parents.insert(parent_buf.clone())
+                {
+                    watcher.watch(&parent_buf, RecursiveMode::NonRecursive)?;
+                }
+            }
+        }
+    }
+
+    let has_file_filter = !watched_files.is_empty();
     let mut last_event: Option<Instant> = None;
 
     for res in rx {
         match res {
             Ok(event) => {
-                // Debounce
                 if let Some(last) = last_event {
                     if last.elapsed() < DEBOUNCE_DURATION {
                         continue;
@@ -39,7 +67,8 @@ pub async fn watch_directory(dir: &Path) -> Result<()> {
                 }
                 last_event = Some(Instant::now());
 
-                if should_process_event(&event, &ignored_patterns) {
+                if should_process_event(&event, &ignored_patterns, has_file_filter, &watched_files)
+                {
                     if let Err(e) = handle_event(&event).await {
                         eprintln!("{} Error handling event: {}", "❌".red(), e);
                     }
@@ -54,26 +83,42 @@ pub async fn watch_directory(dir: &Path) -> Result<()> {
     Ok(())
 }
 
-fn should_process_event(event: &Event, ignored_patterns: &[String]) -> bool {
-    // Only process create and modify events
+fn should_process_event(
+    event: &Event,
+    ignored_patterns: &[String],
+    has_file_filter: bool,
+    watched_files: &HashSet<PathBuf>,
+) -> bool {
     match event.kind {
         EventKind::Create(_) | EventKind::Modify(_) => {}
         _ => return false,
     }
 
-    // Only process .ts and .tsx files that are not ignored
     for path in &event.paths {
         if let Some(ext) = path.extension() {
             if ext == "ts" || ext == "tsx" {
-                // Check if path contains any ignored pattern
                 let path_str = path.to_string_lossy();
                 let is_ignored = ignored_patterns
                     .iter()
                     .any(|pattern| path_str.contains(pattern));
 
-                if !is_ignored {
-                    return true;
+                if is_ignored {
+                    continue;
                 }
+
+                // If we have specific file filters, check that this file
+                // either matches a watched file or comes from a directory watch
+                if has_file_filter {
+                    let canonical = path.canonicalize().unwrap_or_else(|_| path.clone());
+                    if watched_files.contains(&canonical) {
+                        return true;
+                    }
+                    // If the file is not in watched_files, it might still come
+                    // from a recursively watched directory — allow it through
+                    // (the watcher only sends events for watched paths)
+                }
+
+                return true;
             }
         }
     }
@@ -182,113 +227,148 @@ mod tests {
     #[test]
     fn test_should_process_ts_create() {
         let ignored = vec![];
+        let no_files = HashSet::new();
         let event = make_event(
             EventKind::Create(CreateKind::File),
             vec![PathBuf::from("/project/workflows/ci.ts")],
         );
-        assert!(should_process_event(&event, &ignored));
+        assert!(should_process_event(&event, &ignored, false, &no_files));
     }
 
     #[test]
     fn test_should_process_tsx_modify() {
         let ignored = vec![];
+        let no_files = HashSet::new();
         let event = make_event(
             EventKind::Modify(ModifyKind::Data(notify::event::DataChange::Content)),
             vec![PathBuf::from("/project/workflows/component.tsx")],
         );
-        assert!(should_process_event(&event, &ignored));
+        assert!(should_process_event(&event, &ignored, false, &no_files));
     }
 
     #[test]
     fn test_should_ignore_non_ts() {
         let ignored = vec![];
+        let no_files = HashSet::new();
         let event = make_event(
             EventKind::Create(CreateKind::File),
             vec![PathBuf::from("/project/src/main.rs")],
         );
-        assert!(!should_process_event(&event, &ignored));
+        assert!(!should_process_event(&event, &ignored, false, &no_files));
 
         let event_json = make_event(
             EventKind::Modify(ModifyKind::Data(notify::event::DataChange::Content)),
             vec![PathBuf::from("/project/config.json")],
         );
-        assert!(!should_process_event(&event_json, &ignored));
+        assert!(!should_process_event(
+            &event_json,
+            &ignored,
+            false,
+            &no_files
+        ));
     }
 
     #[test]
     fn test_should_ignore_node_modules() {
         let ignored = vec!["node_modules".to_string()];
+        let no_files = HashSet::new();
         let event = make_event(
             EventKind::Create(CreateKind::File),
             vec![PathBuf::from("/project/node_modules/pkg/index.ts")],
         );
-        assert!(!should_process_event(&event, &ignored));
+        assert!(!should_process_event(&event, &ignored, false, &no_files));
     }
 
     #[test]
     fn test_should_ignore_generated() {
         let ignored = vec!["generated".to_string()];
+        let no_files = HashSet::new();
         let event = make_event(
             EventKind::Create(CreateKind::File),
             vec![PathBuf::from("/project/generated/types.ts")],
         );
-        assert!(!should_process_event(&event, &ignored));
+        assert!(!should_process_event(&event, &ignored, false, &no_files));
     }
 
     #[test]
     fn test_should_ignore_delete_event() {
         let ignored = vec![];
+        let no_files = HashSet::new();
         let event = make_event(
             EventKind::Remove(RemoveKind::File),
             vec![PathBuf::from("/project/workflows/ci.ts")],
         );
-        assert!(!should_process_event(&event, &ignored));
+        assert!(!should_process_event(&event, &ignored, false, &no_files));
     }
 
     #[test]
     fn test_should_ignore_custom_pattern() {
         let ignored = vec!["dist".to_string(), ".cache".to_string()];
+        let no_files = HashSet::new();
 
-        // dist/ should be ignored
         let event_dist = make_event(
             EventKind::Create(CreateKind::File),
             vec![PathBuf::from("/project/dist/bundle.ts")],
         );
-        assert!(!should_process_event(&event_dist, &ignored));
+        assert!(!should_process_event(
+            &event_dist,
+            &ignored,
+            false,
+            &no_files
+        ));
 
-        // .cache should be ignored
         let event_cache = make_event(
             EventKind::Create(CreateKind::File),
             vec![PathBuf::from("/project/.cache/types.ts")],
         );
-        assert!(!should_process_event(&event_cache, &ignored));
+        assert!(!should_process_event(
+            &event_cache,
+            &ignored,
+            false,
+            &no_files
+        ));
     }
 
     #[test]
     fn test_default_ignored_patterns() {
-        // Test with default patterns from WatchConfig
         let default_ignored = vec![
             "node_modules".to_string(),
             ".git".to_string(),
             "generated".to_string(),
         ];
+        let no_files = HashSet::new();
 
         let event_node = make_event(
             EventKind::Create(CreateKind::File),
             vec![PathBuf::from("/project/node_modules/pkg/index.ts")],
         );
-        assert!(!should_process_event(&event_node, &default_ignored));
+        assert!(!should_process_event(
+            &event_node,
+            &default_ignored,
+            false,
+            &no_files
+        ));
 
         let event_git = make_event(
             EventKind::Create(CreateKind::File),
             vec![PathBuf::from("/project/.git/hooks/pre-commit.ts")],
         );
-        assert!(!should_process_event(&event_git, &default_ignored));
+        assert!(!should_process_event(
+            &event_git,
+            &default_ignored,
+            false,
+            &no_files
+        ));
 
         let event_generated = make_event(
             EventKind::Create(CreateKind::File),
             vec![PathBuf::from("/project/generated/types.ts")],
         );
-        assert!(!should_process_event(&event_generated, &default_ignored));
+        assert!(!should_process_event(
+            &event_generated,
+            &default_ignored,
+            false,
+            &no_files
+        ));
     }
 }

@@ -33,9 +33,9 @@ pub enum Commands {
 
     /// Start development mode (one-time scan by default)
     Dev {
-        /// Directory to watch
-        #[arg(short, long, default_value = "workflows")]
-        dir: String,
+        /// Workflow directories or individual .ts files
+        #[arg(short, long, default_value = "workflows", num_args = 1..)]
+        input: Vec<String>,
 
         /// Keep watching for changes after the initial scan
         #[arg(long)]
@@ -44,9 +44,9 @@ pub enum Commands {
 
     /// Build TypeScript workflows to YAML
     Build {
-        /// Input directory containing TypeScript workflows
-        #[arg(short, long, default_value = "workflows")]
-        input: String,
+        /// Workflow directories or individual .ts files
+        #[arg(short, long, default_value = "workflows", num_args = 1..)]
+        input: Vec<String>,
 
         /// Output directory for YAML files
         #[arg(short, long, default_value = ".github")]
