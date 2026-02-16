@@ -10,7 +10,7 @@ use crate::config::Config as GajiConfig;
 use crate::executor;
 
 pub struct WorkflowBuilder {
-    input_dir: PathBuf,
+    input_paths: Vec<PathBuf>,
     output_dir: PathBuf,
     dry_run: bool,
     ignored_patterns: Vec<String>,
@@ -25,7 +25,7 @@ fn default_ignored_patterns() -> Vec<String> {
 }
 
 impl WorkflowBuilder {
-    pub fn new(input_dir: PathBuf, output_dir: PathBuf, dry_run: bool) -> Self {
+    pub fn new(input_paths: Vec<PathBuf>, output_dir: PathBuf, dry_run: bool) -> Self {
         let ignored_patterns = GajiConfig::load().map_or_else(
             |_| default_ignored_patterns(),
             |config| {
@@ -38,7 +38,7 @@ impl WorkflowBuilder {
         );
 
         Self {
-            input_dir,
+            input_paths,
             output_dir,
             dry_run,
             ignored_patterns,
@@ -55,10 +55,15 @@ impl WorkflowBuilder {
         let workflow_files = self.find_workflow_files().await?;
 
         if workflow_files.is_empty() {
+            let paths_display: Vec<String> = self
+                .input_paths
+                .iter()
+                .map(|p| p.display().to_string())
+                .collect();
             println!(
                 "{} No workflow files found in {}",
                 "⚠️".yellow(),
-                self.input_dir.display()
+                paths_display.join(", ")
             );
             return Ok(Vec::new());
         }
@@ -98,25 +103,40 @@ impl WorkflowBuilder {
         Ok(built_files)
     }
 
+    fn is_valid_workflow_file(&self, path: &Path) -> bool {
+        if let Some(ext) = path.extension() {
+            if ext == "ts" && !path.to_string_lossy().contains(".d.ts") {
+                let path_str = path.to_string_lossy();
+                return !self
+                    .ignored_patterns
+                    .iter()
+                    .any(|pattern| path_str.contains(pattern));
+            }
+        }
+        false
+    }
+
     async fn find_workflow_files(&self) -> Result<Vec<PathBuf>> {
         let mut files = Vec::new();
-        let mut entries = fs::read_dir(&self.input_dir).await?;
 
-        while let Some(entry) = entries.next_entry().await? {
-            let path = entry.path();
-            if let Some(ext) = path.extension() {
-                if ext == "ts" && !path.to_string_lossy().contains(".d.ts") {
-                    // Check if path contains any ignored pattern
-                    let path_str = path.to_string_lossy();
-                    let is_ignored = self
-                        .ignored_patterns
-                        .iter()
-                        .any(|pattern| path_str.contains(pattern));
-
-                    if !is_ignored {
+        for input_path in &self.input_paths {
+            if input_path.is_file() {
+                if self.is_valid_workflow_file(input_path) {
+                    files.push(input_path.clone());
+                }
+            } else if input_path.is_dir() {
+                let mut entries = fs::read_dir(input_path).await?;
+                while let Some(entry) = entries.next_entry().await? {
+                    let path = entry.path();
+                    if self.is_valid_workflow_file(&path) {
                         files.push(path);
                     }
                 }
+            } else {
+                return Err(anyhow::anyhow!(
+                    "Input path does not exist: {}",
+                    input_path.display()
+                ));
             }
         }
 
@@ -624,8 +644,11 @@ mod tests {
             .await
             .unwrap();
 
-        let builder =
-            WorkflowBuilder::new(dir.path().to_path_buf(), dir.path().join("output"), false);
+        let builder = WorkflowBuilder::new(
+            vec![dir.path().to_path_buf()],
+            dir.path().join("output"),
+            false,
+        );
         let files = builder.find_workflow_files().await.unwrap();
 
         assert_eq!(files.len(), 2);
@@ -656,8 +679,11 @@ mod tests {
         .await
         .unwrap();
 
-        let mut builder =
-            WorkflowBuilder::new(dir.path().to_path_buf(), dir.path().join("output"), false);
+        let mut builder = WorkflowBuilder::new(
+            vec![dir.path().to_path_buf()],
+            dir.path().join("output"),
+            false,
+        );
 
         // Override ignored_patterns for testing
         builder.ignored_patterns = vec!["node_modules".to_string()];
@@ -679,8 +705,11 @@ mod tests {
     #[tokio::test]
     async fn test_build_all_empty_dir() {
         let dir = TempDir::new().unwrap();
-        let builder =
-            WorkflowBuilder::new(dir.path().to_path_buf(), dir.path().join("output"), false);
+        let builder = WorkflowBuilder::new(
+            vec![dir.path().to_path_buf()],
+            dir.path().join("output"),
+            false,
+        );
         let result = builder.build_all().await.unwrap();
         assert!(result.is_empty());
     }

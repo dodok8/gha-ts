@@ -29,8 +29,8 @@ async fn main() -> Result<()> {
         } => {
             cmd_init(force, skip_examples, migrate, interactive).await?;
         }
-        Commands::Dev { dir, watch } => {
-            cmd_dev(&dir, watch).await?;
+        Commands::Dev { input, watch } => {
+            cmd_dev(&input, watch).await?;
         }
         Commands::Build {
             input,
@@ -69,7 +69,7 @@ async fn cmd_init(
     init::init_project(&root, options).await
 }
 
-async fn cmd_dev(dir: &str, watch: bool) -> Result<()> {
+async fn cmd_dev(inputs: &[String], watch: bool) -> Result<()> {
     println!("{} Starting development mode...\n", "🚀".green());
 
     let config = Config::load()?;
@@ -77,44 +77,53 @@ async fn cmd_dev(dir: &str, watch: bool) -> Result<()> {
     let api_url = config.resolve_api_url();
 
     // Initial scan
-    let path = PathBuf::from(dir);
-    if path.exists() {
-        let results = parser::analyze_directory(&path).await?;
+    let mut all_refs = std::collections::HashSet::new();
+    let paths: Vec<PathBuf> = inputs.iter().map(PathBuf::from).collect();
 
-        let mut all_refs = std::collections::HashSet::new();
-        for refs in results.values() {
-            all_refs.extend(refs.clone());
+    for path in &paths {
+        if !path.exists() {
+            continue;
         }
-
-        if !all_refs.is_empty() {
-            println!(
-                "{} Found {} action reference(s), generating types...",
-                "🔍".cyan(),
-                all_refs.len()
-            );
-
-            let gen_start = Instant::now();
-            let cache = Cache::load_or_create()?;
-            let generator = TypeGenerator::with_cache_ttl(
-                cache,
-                PathBuf::from("generated"),
-                token,
-                api_url,
-                config.build.cache_ttl_days,
-            );
-            generator.generate_types_for_refs(&all_refs).await?;
-
-            println!(
-                "{} Types generated in {:.2}s!\n",
-                "✨".green(),
-                gen_start.elapsed().as_secs_f64()
-            );
+        if path.is_dir() {
+            let results = parser::analyze_directory(path).await?;
+            for refs in results.values() {
+                all_refs.extend(refs.clone());
+            }
+        } else if path.is_file() {
+            match parser::analyze_file(path).await {
+                Ok(refs) => all_refs.extend(refs),
+                Err(e) => eprintln!("Warning: Failed to parse {}: {}", path.display(), e),
+            }
         }
     }
 
+    if !all_refs.is_empty() {
+        println!(
+            "{} Found {} action reference(s), generating types...",
+            "🔍".cyan(),
+            all_refs.len()
+        );
+
+        let gen_start = Instant::now();
+        let cache = Cache::load_or_create()?;
+        let generator = TypeGenerator::with_cache_ttl(
+            cache,
+            PathBuf::from("generated"),
+            token,
+            api_url,
+            config.build.cache_ttl_days,
+        );
+        generator.generate_types_for_refs(&all_refs).await?;
+
+        println!(
+            "{} Types generated in {:.2}s!\n",
+            "✨".green(),
+            gen_start.elapsed().as_secs_f64()
+        );
+    }
+
     if watch {
-        // Start watching
-        watcher::watch_directory(&path).await?;
+        watcher::watch_paths(&paths).await?;
     } else {
         println!("{} Done. Run with --watch to keep watching.", "✓".green());
     }
@@ -122,7 +131,7 @@ async fn cmd_dev(dir: &str, watch: bool) -> Result<()> {
     Ok(())
 }
 
-async fn cmd_build(input: &str, output: &str, dry_run: bool) -> Result<()> {
+async fn cmd_build(inputs: &[String], output: &str, dry_run: bool) -> Result<()> {
     let start = Instant::now();
 
     if dry_run {
@@ -131,7 +140,8 @@ async fn cmd_build(input: &str, output: &str, dry_run: bool) -> Result<()> {
         println!("{} Building workflows...\n", "🔨".cyan());
     }
 
-    let builder = WorkflowBuilder::new(PathBuf::from(input), PathBuf::from(output), dry_run);
+    let input_paths: Vec<PathBuf> = inputs.iter().map(PathBuf::from).collect();
+    let builder = WorkflowBuilder::new(input_paths, PathBuf::from(output), dry_run);
 
     let built = builder.build_all().await?;
 
