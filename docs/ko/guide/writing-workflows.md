@@ -253,6 +253,74 @@ Docker Hub 이미지를 직접 사용하려면 `image`에 `docker://` 접두사�
 }
 ```
 
+## 출력
+
+### 타입이 지정된 스텝 출력
+
+액션 스텝에 `id`를 제공하면, gaji는 타입이 지정된 출력 속성이 있는 `ActionStep`을 반환합니다:
+
+```typescript
+const checkout = getAction("actions/checkout@v5");
+
+// id를 제공하면 타입이 지정된 출력을 사용 가능
+const step = checkout({ id: "my-checkout" });
+step.outputs.ref     // "${{ steps.my-checkout.outputs.ref }}"
+step.outputs.commit  // "${{ steps.my-checkout.outputs.commit }}"
+
+const job = new Job("ubuntu-latest")
+  .addStep(step)
+  .addStep({ run: `echo ${step.outputs.ref}` });
+```
+
+### Job 간 출력 전달
+
+`jobOutputs()`를 사용하여 다운스트림 job을 위한 타입이 지정된 참조를 생성합니다. Job의 `.outputs()` 키를 읽어 `${{ needs.<jobId>.outputs.<key> }}` 표현식을 생성합니다:
+
+```typescript
+const checkout = getAction("actions/checkout@v5");
+const step = checkout({ id: "my-checkout" });
+
+// 타입이 지정된 출력으로 job 정의
+const build = new Job("ubuntu-latest")
+  .addStep(step)
+  .outputs({ ref: step.outputs.ref, sha: step.outputs.commit });
+
+// 다운스트림 job을 위한 타입이 지정된 참조 생성
+const buildOutputs = jobOutputs("build", build);
+// buildOutputs.ref → "${{ needs.build.outputs.ref }}"
+// buildOutputs.sha → "${{ needs.build.outputs.sha }}"
+
+const deploy = new Job("ubuntu-latest")
+  .needs("build")
+  .addStep({ run: `deploy --ref ${buildOutputs.ref}` });
+
+const workflow = new Workflow({
+  name: "CI",
+  on: { push: { branches: ["main"] } },
+})
+  .addJob("build", build)
+  .addJob("deploy", deploy);
+```
+
+수동으로 정의된 출력(`$GITHUB_OUTPUT`에 쓰는 `run` 스텝 등)도 사용할 수 있습니다:
+
+```typescript
+const setup = new Job("ubuntu-latest")
+  .addStep({
+    id: "version",
+    run: 'echo "value=1.0.0" >> $GITHUB_OUTPUT',
+  })
+  .outputs({
+    version: "${{ steps.version.outputs.value }}",
+  });
+
+const setupOutputs = jobOutputs("setup", setup);
+
+const deploy = new Job("ubuntu-latest")
+  .needs("setup")
+  .addStep({ run: `deploy --version ${setupOutputs.version}` });
+```
+
 ## 팁
 
 ### 1. 감시 모드 사용

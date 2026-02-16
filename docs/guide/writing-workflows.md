@@ -527,23 +527,70 @@ const job = new Job("ubuntu-latest")
 
 ## Outputs
 
-Define and use job outputs:
+### Typed Step Outputs
+
+When you provide an `id` to an action step, gaji returns an `ActionStep` with typed output properties:
 
 ```typescript
+const checkout = getAction("actions/checkout@v5");
+
+// Providing id gives typed outputs
+const step = checkout({ id: "my-checkout" });
+step.outputs.ref     // "${{ steps.my-checkout.outputs.ref }}"
+step.outputs.commit  // "${{ steps.my-checkout.outputs.commit }}"
+
+const job = new Job("ubuntu-latest")
+  .addStep(step)
+  .addStep({ run: `echo ${step.outputs.ref}` });
+```
+
+### Passing Outputs Between Jobs
+
+Use `jobOutputs()` to create typed references for downstream jobs. It reads the job's `.outputs()` keys and generates `${{ needs.<jobId>.outputs.<key> }}` expressions:
+
+```typescript
+const checkout = getAction("actions/checkout@v5");
+const step = checkout({ id: "my-checkout" });
+
+// Define job with typed outputs
 const build = new Job("ubuntu-latest")
-  .outputs({
-    version: "${{ steps.version.outputs.value }}",
-  })
+  .addStep(step)
+  .outputs({ ref: step.outputs.ref, sha: step.outputs.commit });
+
+// Create typed references for downstream jobs
+const buildOutputs = jobOutputs("build", build);
+// buildOutputs.ref → "${{ needs.build.outputs.ref }}"
+// buildOutputs.sha → "${{ needs.build.outputs.sha }}"
+
+const deploy = new Job("ubuntu-latest")
+  .needs("build")
+  .addStep({ run: `deploy --ref ${buildOutputs.ref}` });
+
+const workflow = new Workflow({
+  name: "CI",
+  on: { push: { branches: ["main"] } },
+})
+  .addJob("build", build)
+  .addJob("deploy", deploy);
+```
+
+You can also use manually defined outputs (e.g., from `run` steps that write to `$GITHUB_OUTPUT`):
+
+```typescript
+const setup = new Job("ubuntu-latest")
   .addStep({
     id: "version",
     run: 'echo "value=1.0.0" >> $GITHUB_OUTPUT',
+  })
+  .outputs({
+    version: "${{ steps.version.outputs.value }}",
   });
 
+const setupOutputs = jobOutputs("setup", setup);
+
 const deploy = new Job("ubuntu-latest")
-  .needs(["build"])
-  .addStep({
-    run: "echo Deploying version ${{ needs.build.outputs.version }}",
-  });
+  .needs("setup")
+  .addStep({ run: `deploy --version ${setupOutputs.version}` });
 ```
 
 ## Tips

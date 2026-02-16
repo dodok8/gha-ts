@@ -11,7 +11,7 @@ GitHub Actions 워크플로우를 표현합니다.
 ```typescript
 class Workflow {
   constructor(config: WorkflowConfig)
-  addJob(id: string, job: Job | CompositeJob | CallJob): this
+  addJob(id: string, job: Job<any> | CompositeJob<any> | CallJob): this
   static fromObject(def: WorkflowDefinition, id?: string): Workflow
   build(filename?: string): void
   toJSON(): WorkflowDefinition
@@ -77,17 +77,17 @@ workflow.build("raw");
 
 ### `Job`
 
-워크플로우의 작업을 나타냅니다.
+워크플로우의 작업을 나타냅니다. 타입 파라미터 `O`는 `jobOutputs()`를 통한 타입 안전한 job 간 참조를 위해 출력 키를 추적합니다.
 
 ```typescript
-class Job {
+class Job<O extends Record<string, string> = {}> {
   constructor(runsOn: string | string[], options?: Partial<JobDefinition>)
   addStep(step: Step): this
   needs(jobs: string | string[]): this
   env(variables: Record<string, string>): this
   when(condition: string): this
   permissions(perms: Permissions): this
-  outputs(outputs: Record<string, string>): this
+  outputs<T extends Record<string, string>>(outputs: T): Job<T>
   strategy(strategy: JobStrategy): this
   continueOnError(v: boolean): this
   timeoutMinutes(m: number): this
@@ -102,7 +102,7 @@ class Job {
 | `env(variables)` | 환경 변수를 설정합니다. |
 | `when(condition)` | job의 `if` 조건을 설정합니다 (예: `"github.ref == 'refs/heads/main'"`). |
 | `permissions(perms)` | job 수준의 권한을 설정합니다 (예: `{ contents: 'read' }`). |
-| `outputs(outputs)` | job 출력을 정의합니다. |
+| `outputs(outputs)` | job 출력을 정의합니다. 출력 키를 캡처한 `Job<T>`를 반환합니다. |
 | `strategy(strategy)` | 매트릭스 전략을 설정합니다. |
 | `continueOnError(v)` | `continue-on-error` 플래그를 설정합니다. |
 | `timeoutMinutes(m)` | `timeout-minutes` 값을 설정합니다. |
@@ -383,7 +383,7 @@ Docker Hub 이미지를 직접 사용하려면 `image`에 `docker://` 접두사�
 TypeScript 클래스 상속을 통해 재사용 가능한 작업 템플릿을 만듭니다. `CompositeJob`은 `Job`을 상속하므로 모든 `Job` 메서드를 사용할 수 있습니다.
 
 ```typescript
-class CompositeJob extends Job {
+class CompositeJob<O extends Record<string, string> = {}> extends Job<O> {
   constructor(runsOn: string | string[], options?: Partial<JobDefinition>)
 }
 ```
@@ -566,12 +566,27 @@ const job = new Job("ubuntu-latest")
 
 ### `getAction()`
 
-타입이 지정된 액션 함수를 가져옵니다.
+타입이 지정된 액션 함수를 가져옵니다. 출력이 정의된 액션의 경우, `getAction()`은 두 가지 오버로드를 가진 callable을 반환합니다:
+
+- `id` 필수: 타입이 지정된 출력 속성이 있는 `ActionStep<Outputs>` 반환
+- `id` 선택: `JobStep` 반환
 
 ```typescript
-function getAction<T extends string>(
-  ref: T
-): (config?: ActionConfig) => Step
+// 출력이 있는 액션 (예: actions/checkout@v5)
+function getAction(ref: 'actions/checkout@v5'): {
+  (config: { id: string; with?: Inputs; ... }): ActionStep<Outputs>
+  (config?: { id?: string; with?: Inputs; ... }): JobStep
+}
+
+// 출력이 없는 액션
+function getAction(ref: 'actions/setup-node@v4'):
+  (config?: { with?: Inputs; ... }) => JobStep
+
+// 알 수 없는 액션에 대한 폴백
+function getAction<T extends string>(ref: T): {
+  (config: { id: string; ... }): ActionStep<Record<string, string>>
+  (config?: { ... }): JobStep
+}
 ```
 
 #### 예제
@@ -584,33 +599,119 @@ const setupNode = getAction("actions/setup-node@v4");
 const step = checkout({
   name: "Checkout code",
   with: {
-    // ✅ 자동완성 사용 가능!
+    // 입력에 대한 자동완성 사용 가능
     repository: "owner/repo",
     ref: "main",
     "fetch-depth": 0,
   },
 });
+
+// 타입이 지정된 스텝 출력 (id 필수)
+const checkoutStep = checkout({ id: "my-checkout" });
+// checkoutStep.outputs.ref → "${{ steps.my-checkout.outputs.ref }}"
+// checkoutStep.outputs.commit → "${{ steps.my-checkout.outputs.commit }}"
+
+const job = new Job("ubuntu-latest")
+  .addStep(checkoutStep)
+  .addStep({ run: `echo ${checkoutStep.outputs.ref}` });
+```
+
+---
+
+### `jobOutputs()`
+
+다운스트림 job에서 사용할 타입이 지정된 job 출력 참조를 생성합니다. `Job` 객체의 `.outputs()` 호출에서 출력 키를 읽어 `${{ needs.<jobId>.outputs.<key> }}` 표현식을 생성합니다.
+
+```typescript
+function jobOutputs<O extends Record<string, string>>(
+  jobId: string,
+  job: Job<O>,
+): JobOutputs<O>
+```
+
+#### 예제
+
+```typescript
+const checkout = getAction("actions/checkout@v5");
+const step = checkout({ id: "my-checkout" });
+
+const build = new Job("ubuntu-latest")
+  .addStep(step)
+  .outputs({ ref: step.outputs.ref, sha: step.outputs.commit });
+
+// 다운스트림 job을 위한 타입이 지정된 참조 생성
+const buildOutputs = jobOutputs("build", build);
+// buildOutputs.ref → "${{ needs.build.outputs.ref }}"
+// buildOutputs.sha → "${{ needs.build.outputs.sha }}"
+
+const deploy = new Job("ubuntu-latest")
+  .needs("build")
+  .addStep({ run: `echo ${buildOutputs.ref}` });
+
+const workflow = new Workflow({
+  name: "CI",
+  on: { push: { branches: ["main"] } },
+})
+  .addJob("build", build)
+  .addJob("deploy", deploy);
 ```
 
 ---
 
 ## 타입 정의
 
-### `Step`
+### `JobStep`
 
 워크플로우 스텝입니다.
 
 ```typescript
-interface Step {
+interface JobStep {
   name?: string
   id?: string
   if?: string
   uses?: string
-  with?: Record<string, string | number | boolean>
+  with?: Record<string, unknown>
   run?: string
   env?: Record<string, string>
+  shell?: string
+  'working-directory'?: string
   "continue-on-error"?: boolean
   "timeout-minutes"?: number
+}
+```
+
+### `ActionStep<O>`
+
+`id`를 제공했을 때 `getAction()`이 반환하는 스텝입니다. `JobStep`을 확장하여 타입이 지정된 출력 접근을 제공합니다.
+
+```typescript
+interface ActionStep<O = {}> extends JobStep {
+  readonly outputs: O
+}
+```
+
+출력 속성은 표현식 문자열로 해석됩니다:
+
+```typescript
+const step = checkout({ id: "co" });
+step.outputs.ref  // "${{ steps.co.outputs.ref }}"
+```
+
+### `Step`
+
+스텝 타입의 유니온입니다.
+
+```typescript
+type Step = JobStep | ActionStep<any>
+```
+
+### `JobOutputs<T>`
+
+타입이 지정된 job 출력 참조를 위한 매핑 타입입니다. 각 키는 `${{ needs.<jobId>.outputs.<key> }}` 표현식으로 해석됩니다.
+
+```typescript
+type JobOutputs<T extends Record<string, string>> = {
+  readonly [K in keyof T]: string
 }
 ```
 

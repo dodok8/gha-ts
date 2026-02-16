@@ -11,7 +11,7 @@ Represents a GitHub Actions workflow.
 ```typescript
 class Workflow {
   constructor(config: WorkflowConfig)
-  addJob(id: string, job: Job | CompositeJob | CallJob): this
+  addJob(id: string, job: Job<any> | CompositeJob<any> | CallJob): this
   static fromObject(def: WorkflowDefinition, id?: string): Workflow
   build(filename?: string): void
   toJSON(): WorkflowDefinition
@@ -77,17 +77,17 @@ workflow.build("raw");
 
 ### `Job`
 
-Represents a job in a workflow.
+Represents a job in a workflow. The type parameter `O` tracks the job's output keys for type-safe inter-job references via `jobOutputs()`.
 
 ```typescript
-class Job {
+class Job<O extends Record<string, string> = {}> {
   constructor(runsOn: string | string[], options?: Partial<JobDefinition>)
   addStep(step: Step): this
   needs(jobs: string | string[]): this
   env(variables: Record<string, string>): this
   when(condition: string): this
   permissions(perms: Permissions): this
-  outputs(outputs: Record<string, string>): this
+  outputs<T extends Record<string, string>>(outputs: T): Job<T>
   strategy(strategy: JobStrategy): this
   continueOnError(v: boolean): this
   timeoutMinutes(m: number): this
@@ -102,7 +102,7 @@ class Job {
 | `env(variables)` | Set environment variables. |
 | `when(condition)` | Set the job's `if` condition (e.g., `"github.ref == 'refs/heads/main'"`). |
 | `permissions(perms)` | Set job-level permissions (e.g., `{ contents: 'read' }`). |
-| `outputs(outputs)` | Define job outputs. |
+| `outputs(outputs)` | Define job outputs. Returns `Job<T>` where `T` captures the output keys. |
 | `strategy(strategy)` | Set matrix strategy. |
 | `continueOnError(v)` | Set the `continue-on-error` flag. |
 | `timeoutMinutes(m)` | Set the `timeout-minutes` value. |
@@ -385,7 +385,7 @@ To use a Docker Hub image directly, prefix `image` with `docker://`:
 Create reusable job templates via TypeScript class inheritance. `CompositeJob` extends `Job`, so all `Job` methods are available.
 
 ```typescript
-class CompositeJob extends Job {
+class CompositeJob<O extends Record<string, string> = {}> extends Job<O> {
   constructor(runsOn: string | string[], options?: Partial<JobDefinition>)
 }
 ```
@@ -572,12 +572,27 @@ const job = new Job("ubuntu-latest")
 
 ### `getAction()`
 
-Get a typed action function.
+Get a typed action function. For actions that define outputs, `getAction()` returns a callable with two overloads:
+
+- With `id` (required): returns `ActionStep<Outputs>` with typed output properties
+- Without `id` (optional): returns `JobStep`
 
 ```typescript
-function getAction<T extends string>(
-  ref: T
-): (config?: ActionConfig) => Step
+// For actions WITH outputs (e.g., actions/checkout@v5)
+function getAction(ref: 'actions/checkout@v5'): {
+  (config: { id: string; with?: Inputs; ... }): ActionStep<Outputs>
+  (config?: { id?: string; with?: Inputs; ... }): JobStep
+}
+
+// For actions WITHOUT outputs
+function getAction(ref: 'actions/setup-node@v4'):
+  (config?: { with?: Inputs; ... }) => JobStep
+
+// Fallback for unknown actions
+function getAction<T extends string>(ref: T): {
+  (config: { id: string; ... }): ActionStep<Record<string, string>>
+  (config?: { ... }): JobStep
+}
 ```
 
 #### Example
@@ -590,33 +605,119 @@ const setupNode = getAction("actions/setup-node@v4");
 const step = checkout({
   name: "Checkout code",
   with: {
-    // ✅ Autocomplete available!
+    // Autocomplete available for inputs
     repository: "owner/repo",
     ref: "main",
     "fetch-depth": 0,
   },
 });
+
+// Typed step outputs (requires id)
+const checkoutStep = checkout({ id: "my-checkout" });
+// checkoutStep.outputs.ref → "${{ steps.my-checkout.outputs.ref }}"
+// checkoutStep.outputs.commit → "${{ steps.my-checkout.outputs.commit }}"
+
+const job = new Job("ubuntu-latest")
+  .addStep(checkoutStep)
+  .addStep({ run: `echo ${checkoutStep.outputs.ref}` });
+```
+
+---
+
+### `jobOutputs()`
+
+Create typed references to a job's outputs for use in downstream jobs. Reads the output keys from the `Job` object's `.outputs()` call and generates `${{ needs.<jobId>.outputs.<key> }}` expressions.
+
+```typescript
+function jobOutputs<O extends Record<string, string>>(
+  jobId: string,
+  job: Job<O>,
+): JobOutputs<O>
+```
+
+#### Example
+
+```typescript
+const checkout = getAction("actions/checkout@v5");
+const step = checkout({ id: "my-checkout" });
+
+const build = new Job("ubuntu-latest")
+  .addStep(step)
+  .outputs({ ref: step.outputs.ref, sha: step.outputs.commit });
+
+// Create typed references for downstream jobs
+const buildOutputs = jobOutputs("build", build);
+// buildOutputs.ref → "${{ needs.build.outputs.ref }}"
+// buildOutputs.sha → "${{ needs.build.outputs.sha }}"
+
+const deploy = new Job("ubuntu-latest")
+  .needs("build")
+  .addStep({ run: `echo ${buildOutputs.ref}` });
+
+const workflow = new Workflow({
+  name: "CI",
+  on: { push: { branches: ["main"] } },
+})
+  .addJob("build", build)
+  .addJob("deploy", deploy);
 ```
 
 ---
 
 ## Type Definitions
 
-### `Step`
+### `JobStep`
 
 A workflow step.
 
 ```typescript
-interface Step {
+interface JobStep {
   name?: string
   id?: string
   if?: string
   uses?: string
-  with?: Record<string, string | number | boolean>
+  with?: Record<string, unknown>
   run?: string
   env?: Record<string, string>
+  shell?: string
+  'working-directory'?: string
   "continue-on-error"?: boolean
   "timeout-minutes"?: number
+}
+```
+
+### `ActionStep<O>`
+
+A step returned by `getAction()` when `id` is provided. Extends `JobStep` with typed output access.
+
+```typescript
+interface ActionStep<O = {}> extends JobStep {
+  readonly outputs: O
+}
+```
+
+Output properties resolve to expression strings:
+
+```typescript
+const step = checkout({ id: "co" });
+step.outputs.ref  // "${{ steps.co.outputs.ref }}"
+```
+
+### `Step`
+
+Union of step types.
+
+```typescript
+type Step = JobStep | ActionStep<any>
+```
+
+### `JobOutputs<T>`
+
+Mapped type for typed job output references. Each key resolves to a `${{ needs.<jobId>.outputs.<key> }}` expression.
+
+```typescript
+type JobOutputs<T extends Record<string, string>> = {
+  readonly [K in keyof T]: string
 }
 ```
 
