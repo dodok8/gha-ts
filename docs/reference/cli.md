@@ -58,10 +58,10 @@ gaji dev [OPTIONS]
 
 **Options.**
 
-| Option | Description |
-|--------|-------------|
-| `-d, --dir <DIR>` | Directory to scan (default. `workflows`) |
-| `--watch` | Keep watching for changes after initial scan |
+| Option                   | Description                                                           |
+|--------------------------|-----------------------------------------------------------------------|
+| `-i, --input <PATH>...`  | Workflow directories or individual `.ts` files (default. `workflows`) |
+| `--watch`                | Keep watching for changes after initial scan                          |
 
 **Examples.**
 
@@ -73,12 +73,15 @@ gaji dev
 gaji dev --watch
 
 # Scan a custom directory
-gaji dev --dir src/workflows
+gaji dev -i src/workflows
+
+# Scan specific files
+gaji dev -i workflows/ci.ts workflows/release.ts
 ```
 
 **What it does.**
 
-- Scans all `.ts` files in `workflows/`
+- Scans all `.ts` files in the specified paths
 - Extracts `getAction()` calls
 - Fetches `action.yml` from GitHub
 - Generates TypeScript types in `generated/`
@@ -102,7 +105,7 @@ gaji build [OPTIONS]
 
 | Option | Description |
 |--------|-------------|
-| `-i, --input <DIR>` | Input directory containing TypeScript workflows (default. `workflows`) |
+| `-i, --input <PATH>...` | Workflow directories or individual `.ts` files (default. `workflows`) |
 | `-o, --output <DIR>` | Output directory for YAML files (default. `.github`) |
 | `--dry-run` | Preview YAML output without writing files |
 
@@ -117,6 +120,9 @@ gaji build --dry-run
 
 # Custom input/output directories
 gaji build --input src/workflows --output .github
+
+# Build specific files
+gaji build -i workflows/ci.ts workflows/release.ts
 ```
 
 ::: tip
@@ -125,7 +131,7 @@ Validation and formatting options are configured via `.gaji.toml`, not CLI flags
 
 **What it does.**
 
-- Finds all `.ts` files in `workflows/`
+- Finds all `.ts` files in the specified paths
 - Executes them with the built-in QuickJS engine (falls back to `npx tsx`)
 - Converts output to YAML
 - Writes workflows to `.github/workflows/`

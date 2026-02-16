@@ -58,10 +58,10 @@ gaji dev [옵션]
 
 **옵션.**
 
-| 옵션 | 설명 |
-|------|------|
-| `-d, --dir <DIR>` | 스캔할 디렉토리 (기본값. `workflows`) |
-| `--watch` | 초기 스캔 후 변경 사항 계속 감시 |
+| 옵션                     | 설명                                                        |
+|--------------------------|-------------------------------------------------------------|
+| `-i, --input <PATH>...`  | 스캔할 디렉토리 또는 개별 `.ts` 파일 (기본값. `workflows`)  |
+| `--watch`                | 초기 스캔 후 변경 사항 계속 감시                            |
 
 **예제.**
 
@@ -73,12 +73,15 @@ gaji dev
 gaji dev --watch
 
 # 커스텀 디렉토리 스캔
-gaji dev --dir src/workflows
+gaji dev -i src/workflows
+
+# 특정 파일 스캔
+gaji dev -i workflows/ci.ts workflows/release.ts
 ```
 
 **동작.**
 
-- `workflows/`의 모든 `.ts` 파일 스캔
+- 지정된 경로의 모든 `.ts` 파일 스캔
 - `getAction()` 호출 추출
 - GitHub에서 `action.yml` 가져오기
 - `generated/`에 TypeScript 타입 생성
@@ -102,7 +105,7 @@ gaji build [옵션]
 
 | 옵션 | 설명 |
 |------|------|
-| `-i, --input <DIR>` | TypeScript 워크플로우가 있는 입력 디렉토리 (기본값. `workflows`) |
+| `-i, --input <PATH>...` | TypeScript 워크플로우 디렉토리 또는 개별 `.ts` 파일 (기본값. `workflows`) |
 | `-o, --output <DIR>` | YAML 파일 출력 디렉토리 (기본값. `.github`) |
 | `--dry-run` | 파일 작성 없이 YAML 출력 미리보기 |
 
@@ -117,6 +120,9 @@ gaji build --dry-run
 
 # 커스텀 입출력 디렉토리
 gaji build --input src/workflows --output .github
+
+# 특정 파일 빌드
+gaji build -i workflows/ci.ts workflows/release.ts
 ```
 
 ... tip
@@ -125,7 +131,7 @@ gaji build --input src/workflows --output .github
 
 **동작.**
 
-- `workflows/`의 모든 `.ts` 파일 찾기
+- 지정된 경로의 모든 `.ts` 파일 찾기
 - 내장 QuickJS 엔진으로 실행 (`npx tsx` 폴백)
 - 출력을 YAML로 변환
 - 워크플로우를 `.github/workflows/`에 작성

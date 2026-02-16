@@ -242,7 +242,7 @@ gaji dev [OPTIONS]
 
 | Option | Description |
 |---|---|
-| `-d, --dir <DIR>` | Directory to scan (default: `workflows`) |
+| `-i, --input <PATH>...` | Workflow directories or individual `.ts` files (default: `workflows`) |
 | `--watch` | Keep watching for changes after the initial scan |
 
 ### `gaji build`
@@ -255,7 +255,7 @@ gaji build [OPTIONS]
 
 | Option | Description |
 |---|---|
-| `-i, --input <DIR>` | Input directory containing TypeScript workflows (default: `workflows`) |
+| `-i, --input <PATH>...` | Workflow directories or individual `.ts` files (default: `workflows`) |
 | `-o, --output <DIR>` | Output directory for YAML files (default: `.github`) |
 | `--dry-run` | Preview YAML output without writing files |
 
