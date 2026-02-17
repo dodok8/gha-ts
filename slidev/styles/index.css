@@ -1,0 +1,61 @@
+@import url('https://cdn.jsdelivr.net/npm/ridibatang@0.1.0/webfont/RidiBatang.css');
+@import url('https://cdn.jsdelivr.net/gh/joungkyun/font-d2coding/d2coding.css');
+
+:root {
+  /* Purple highlight / primary color */
+  --slidev-theme-primary: #7c3aed;
+
+  /* Font families */
+  --slidev-font-sans: 'RidiBatang', serif;
+  --slidev-font-mono: 'D2Coding', monospace;
+}
+
+/* Apply base font to all slides */
+.slidev-layout {
+  font-family: 'RidiBatang', serif;
+}
+
+/* Code blocks use D2Coding */
+.slidev-layout pre,
+.slidev-layout code {
+  font-family: 'D2Coding', monospace !important;
+}
+
+/* Shiki code blocks */
+.shiki {
+  font-family: 'D2Coding', monospace !important;
+}
+
+/* Override seriph cover */
+.slidev-layout.cover {
+  background-image: none !important;
+  background: white !important;
+  color: #000 !important;
+}
+
+/* Text color */
+.slidev-layout {
+  color: #000;
+}
+
+.slidev-layout h1,
+.slidev-layout h2,
+.slidev-layout h3 {
+  color: #000;
+  background-image: none !important;
+  -webkit-text-fill-color: #000 !important;
+}
+
+/* Links in purple */
+.slidev-layout a {
+  color: #7c3aed;
+}
+
+.slidev-layout a:hover {
+  color: #6d28d9;
+}
+
+/* Slide number / progress bar */
+.slidev-progress {
+  background: #7c3aed !important;
+}
