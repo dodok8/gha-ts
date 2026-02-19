@@ -37,7 +37,7 @@ async fn main() -> Result<()> {
             output,
             dry_run,
         } => {
-            cmd_build(&input, &output, dry_run).await?;
+            cmd_build(&input, output.as_deref(), dry_run).await?;
         }
         Commands::Add { action } => {
             cmd_add(&action).await?;
@@ -78,7 +78,11 @@ async fn cmd_dev(inputs: &[String], watch: bool) -> Result<()> {
 
     // Initial scan
     let mut all_refs = std::collections::HashSet::new();
-    let paths: Vec<PathBuf> = inputs.iter().map(PathBuf::from).collect();
+    let paths: Vec<PathBuf> = if inputs.is_empty() {
+        vec![PathBuf::from(&config.project.workflows_dir)]
+    } else {
+        inputs.iter().map(PathBuf::from).collect()
+    };
 
     for path in &paths {
         if !path.exists() {
@@ -131,7 +135,7 @@ async fn cmd_dev(inputs: &[String], watch: bool) -> Result<()> {
     Ok(())
 }
 
-async fn cmd_build(inputs: &[String], output: &str, dry_run: bool) -> Result<()> {
+async fn cmd_build(inputs: &[String], output: Option<&str>, dry_run: bool) -> Result<()> {
     let start = Instant::now();
 
     if dry_run {
@@ -140,8 +144,16 @@ async fn cmd_build(inputs: &[String], output: &str, dry_run: bool) -> Result<()>
         println!("{} Building workflows...\n", "🔨".cyan());
     }
 
-    let input_paths: Vec<PathBuf> = inputs.iter().map(PathBuf::from).collect();
-    let builder = WorkflowBuilder::new(input_paths, PathBuf::from(output), dry_run);
+    let config = Config::load()?;
+
+    let input_paths: Vec<PathBuf> = if inputs.is_empty() {
+        vec![PathBuf::from(&config.project.workflows_dir)]
+    } else {
+        inputs.iter().map(PathBuf::from).collect()
+    };
+
+    let output_dir = output.unwrap_or(&config.project.output_dir);
+    let builder = WorkflowBuilder::new(input_paths, PathBuf::from(output_dir), dry_run);
 
     let built = builder.build_all().await?;
 

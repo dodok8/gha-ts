@@ -35,8 +35,8 @@ format = true
 
 | 옵션 | 타입 | 기본값 | 설명 |
 |------|------|--------|------|
-| `workflows_dir` | string | `"workflows"` | TypeScript 워크플로우가 있는 디렉토리 |
-| `output_dir` | string | `".github"` | 기본 출력 디렉토리 (워크플로우는 `workflows/`, 액션은 `actions/`에 저장) |
+| `workflows_dir` | string | `"workflows"` | TypeScript 워크플로우가 있는 디렉토리. `gaji dev`와 `gaji build`의 `--input` 기본값으로 사용 |
+| `output_dir` | string | `".github"` | 기본 출력 디렉토리 (워크플로우는 `workflows/`, 액션은 `actions/`에 저장). `gaji build`의 `--output` 기본값으로 사용 |
 | `generated_dir` | string | `"generated"` | 생성된 액션 타입용 디렉토리 |
 
 **예제:**

@@ -58,10 +58,10 @@ gaji dev [OPTIONS]
 
 **Options.**
 
-| Option                   | Description                                                           |
-|--------------------------|-----------------------------------------------------------------------|
-| `-i, --input <PATH>...`  | Workflow directories or individual `.ts` files (default. `workflows`) |
-| `--watch`                | Keep watching for changes after initial scan                          |
+| Option                   | Description                                                                              |
+|--------------------------|------------------------------------------------------------------------------------------|
+| `-i, --input <PATH>...`  | Workflow directories or individual `.ts` files (falls back to `workflows_dir` in config) |
+| `--watch`                | Keep watching for changes after initial scan                                             |
 
 **Examples.**
 
@@ -105,8 +105,8 @@ gaji build [OPTIONS]
 
 | Option | Description |
 |--------|-------------|
-| `-i, --input <PATH>...` | Workflow directories or individual `.ts` files (default. `workflows`) |
-| `-o, --output <DIR>` | Output directory for YAML files (default. `.github`) |
+| `-i, --input <PATH>...` | Workflow directories or individual `.ts` files (falls back to `workflows_dir` in config) |
+| `-o, --output <DIR>` | Output directory for YAML files (falls back to `output_dir` in config) |
 | `--dry-run` | Preview YAML output without writing files |
 
 **Examples.**

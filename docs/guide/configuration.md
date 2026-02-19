@@ -35,8 +35,8 @@ Project-level settings:
 
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
-| `workflows_dir` | string | `"workflows"` | Directory containing TypeScript workflows |
-| `output_dir` | string | `".github"` | Base output directory (workflows go to `workflows/`, actions to `actions/`) |
+| `workflows_dir` | string | `"workflows"` | Directory containing TypeScript workflows. Used as the default `--input` for `gaji dev` and `gaji build` |
+| `output_dir` | string | `".github"` | Base output directory (workflows go to `workflows/`, actions to `actions/`). Used as the default `--output` for `gaji build` |
 | `generated_dir` | string | `"generated"` | Directory for generated action types |
 
 **Example:**
