@@ -139,22 +139,22 @@ const job = new Job("ubuntu-latest", {
 
 ---
 
-### `CompositeAction`
+### `Action`
 
 재사용 가능한 [컴포지트 액션](https://docs.github.com/en/actions/sharing-automations/creating-actions/creating-a-composite-action)을 만듭니다.
 
 ```typescript
-class CompositeAction {
-  constructor(config: CompositeActionConfig)
+class Action {
+  constructor(config: ActionConfig)
   addStep(step: Step): this
   build(filename: string): void
 }
 ```
 
-#### `CompositeActionConfig`
+#### `ActionConfig`
 
 ```typescript
-interface CompositeActionConfig {
+interface ActionConfig {
   name: string
   description: string
   inputs?: Record<string, ActionInput>
@@ -168,9 +168,9 @@ interface CompositeActionConfig {
 // @noErrors
 // @filename: workflows/example.ts
 // ---cut---
-import { CompositeAction } from "../generated/index.js";
+import { Action } from "../generated/index.js";
 
-const setupEnv = new CompositeAction({
+const setupEnv = new Action({
   name: "Setup Environment",
   description: "Setup Node.js and install dependencies",
   inputs: {
@@ -210,21 +210,21 @@ const job = new Job("ubuntu-latest")
 
 ---
 
-### `JavaScriptAction`
+### `NodeAction`
 
 [Node.js 기반 GitHub Actions](https://docs.github.com/en/actions/sharing-automations/creating-actions/creating-a-javascript-action)를 만듭니다.
 
 ```typescript
-class JavaScriptAction {
-  constructor(config: JavaScriptActionConfig, runs: JavaScriptActionRuns)
+class NodeAction {
+  constructor(config: NodeActionConfig, runs: NodeActionRuns)
   build(filename: string): void
 }
 ```
 
-#### `JavaScriptActionConfig`
+#### `NodeActionConfig`
 
 ```typescript
-interface JavaScriptActionConfig {
+interface NodeActionConfig {
   name: string
   description: string
   inputs?: Record<string, ActionInputDefinition>
@@ -232,10 +232,10 @@ interface JavaScriptActionConfig {
 }
 ```
 
-#### `JavaScriptActionRuns`
+#### `NodeActionRuns`
 
 ```typescript
-interface JavaScriptActionRuns {
+interface NodeActionRuns {
   using: 'node12' | 'node16' | 'node20'
   main: string
   pre?: string
@@ -250,9 +250,9 @@ interface JavaScriptActionRuns {
 ```ts twoslash
 // @filename: workflows/example.ts
 // ---cut---
-import { JavaScriptAction } from "../generated/index.js";
+import { NodeAction } from "../generated/index.js";
 
-const action = new JavaScriptAction(
+const action = new NodeAction(
   {
     name: "Hello World",
     description: "Greet someone and record the time",
@@ -278,7 +278,7 @@ const action = new JavaScriptAction(
 action.build("hello-world");
 ```
 
-`.github/actions/hello-world/action.yml`이 생성됩니다. [`CallAction.from()`](#callaction)으로 워크플로우에서 참조할 수 있습니다.
+`.github/actions/hello-world/action.yml`이 생성됩니다. [`ActionRef.from()`](#actionref)으로 워크플로우에서 참조할 수 있습니다.
 
 전체 예제는 [JavaScript Action 예제](/ko/examples/javascript-action)를 참조하세요.
 
@@ -365,98 +365,12 @@ Docker Hub 이미지를 직접 사용하려면 `image`에 `docker://` 접두사�
 
 ---
 
-### `CompositeJob`
+### `WorkflowCall`
 
-TypeScript 클래스 상속을 통해 재사용 가능한 작업 템플릿을 만듭니다. `CompositeJob`은 `Job`을 상속하므로 모든 `Job` 메서드를 사용할 수 있습니다.
-
-```typescript
-class CompositeJob<O extends Record<string, string> = {}> extends Job<O> {
-  constructor(runsOn: string | string[], options?: Partial<JobDefinition>)
-}
-```
-
-`Job`과 달리 `CompositeJob`은 `extends`로 서브클래싱하여 도메인별 파라미터화된 job 템플릿을 만들 때 사용합니다. YAML 출력은 일반 `Job`과 동일합니다.
-
-::: tip CompositeJob vs Job
-일회성 job에는 `Job`을 직접 사용하세요. 공통 패턴을 파라미터와 함께 캡슐화한 **재사용 가능한 클래스**를 만들 때 `CompositeJob`을 사용하세요.
-:::
-
-#### 예제
-
-```ts twoslash
-// @noErrors
-// @filename: workflows/example.ts
-// ---cut---
-import { CompositeJob } from "../generated/index.js";
-
-// 재사용 가능한 작업 템플릿 정의
-class NodeTestJob extends CompositeJob {
-  constructor(nodeVersion: string) {
-    super("ubuntu-latest");
-
-    this
-      .addStep(checkout({}))
-      .addStep(setupNode({
-        with: { "node-version": nodeVersion },
-      }))
-      .addStep({ run: "npm ci" })
-      .addStep({ run: "npm test" });
-  }
-}
-
-// 워크플로우에서 사용
-const workflow = new Workflow({
-  name: "Test Matrix",
-  on: { push: { branches: ["main"] } },
-})
-  .addJob("test-node-18", new NodeTestJob("18"))
-  .addJob("test-node-20", new NodeTestJob("20"))
-  .addJob("test-node-22", new NodeTestJob("22"));
-```
-
-더 복잡한 재사용 가능한 작업도 만들 수 있습니다:
+다른 리포지토리나 파일에 정의된 [재사용 가능한 워크플로우](https://docs.github.com/en/actions/using-workflows/reusing-workflows)를 호출합니다. `Job`과 달리 `WorkflowCall`은 `steps`가 없으며, `uses`를 통해 참조된 워크플로우에 위임합니다.
 
 ```typescript
-class DeployJob extends CompositeJob {
-  constructor(environment: "staging" | "production") {
-    super("ubuntu-latest");
-
-    this
-      .env({
-        ENVIRONMENT: environment,
-        API_URL: environment === "production"
-          ? "https://api.example.com"
-          : "https://staging.api.example.com",
-      })
-      .addStep(checkout({}))
-      .addStep(setupNode({ with: { "node-version": "20" } }))
-      .addStep({
-        name: "Deploy",
-        run: `npm run deploy:${environment}`,
-        env: {
-          DEPLOY_TOKEN: "${{ secrets.DEPLOY_TOKEN }}",
-        },
-      });
-  }
-}
-
-// 워크플로우에서 사용
-const workflow = new Workflow({
-  name: "Deploy",
-  on: { push: { tags: ["v*"] } },
-})
-  .addJob("deploy-staging", new DeployJob("staging"))
-  .addJob("deploy-production", new DeployJob("production").needs(["deploy-staging"]));
-```
-
----
-
-### `CallJob`
-
-다른 리포지토리나 파일에 정의된 [재사용 가능한 워크플로우](https://docs.github.com/en/actions/using-workflows/reusing-workflows)를 호출합니다. `Job`과 달리 `CallJob`은 `steps`가 없으며, `uses`를 통해 참조된 워크플로우에 위임합니다.
-
-```typescript
-class CallJob {
+class WorkflowCall {
   constructor(uses: string)
   with(inputs: Record<string, unknown>): this
   secrets(s: Record<string, unknown> | 'inherit'): this
@@ -480,9 +394,9 @@ class CallJob {
 ```ts twoslash
 // @filename: workflows/example.ts
 // ---cut---
-import { CallJob, Workflow } from "../generated/index.js";
+import { WorkflowCall, Workflow } from "../generated/index.js";
 
-const deploy = new CallJob("octo-org/deploy/.github/workflows/deploy.yml@main")
+const deploy = new WorkflowCall("octo-org/deploy/.github/workflows/deploy.yml@main")
   .with({ environment: "production" })
   .secrets("inherit")
   .needs(["build"]);
@@ -511,30 +425,30 @@ jobs:
 
 ---
 
-### `CallAction`
+### `ActionRef`
 
 gaji로 빌드한 로컬 composite 또는 JavaScript 액션을 job의 스텝으로 참조합니다.
 
 ```typescript
-class CallAction {
+class ActionRef {
   constructor(uses: string)
-  static from(action: CompositeAction | JavaScriptAction | DockerAction): CallAction
+  static from(action: Action | NodeAction | DockerAction): ActionRef
   toJSON(): Step
 }
 ```
 
 | 메서드 | 설명 |
 |--------|------|
-| `from(action)` | `CompositeAction`, `JavaScriptAction`, `DockerAction` 인스턴스로부터 `CallAction`을 생성합니다. `.github/actions/<id>` 경로를 자동으로 해석합니다. |
+| `from(action)` | `Action`, `NodeAction`, `DockerAction` 인스턴스로부터 `ActionRef`을 생성합니다. `.github/actions/<id>` 경로를 자동으로 해석합니다. |
 
 #### 예제
 
 ```ts twoslash
 // @filename: workflows/example.ts
 // ---cut---
-import { CompositeAction, CallAction, Job } from "../generated/index.js";
+import { Action, ActionRef, Job } from "../generated/index.js";
 
-const setupEnv = new CompositeAction({
+const setupEnv = new Action({
   name: "Setup",
   description: "Setup environment",
 });
@@ -542,7 +456,7 @@ setupEnv.build("setup-env");
 
 const job = new Job("ubuntu-latest")
   .addStep({
-    ...CallAction.from(setupEnv).toJSON(),
+    ...ActionRef.from(setupEnv).toJSON(),
     with: { "node-version": "20" },
   });
 ```
@@ -726,7 +640,7 @@ interface JobStrategy {
 
 ### `ActionInput`
 
-액션 입력 정의 (CompositeAction용)입니다.
+액션 입력 정의 (Action용)입니다.
 
 ```typescript
 interface ActionInput {
@@ -738,7 +652,7 @@ interface ActionInput {
 
 ### `ActionOutput`
 
-액션 출력 정의 (CompositeAction용)입니다.
+액션 출력 정의 (Action용)입니다.
 
 ```typescript
 interface ActionOutput {
@@ -763,8 +677,9 @@ const test = new Job("ubuntu-latest")
   .addStep({ run: "npm ci" })
   .addStep({ run: "npm test" });
 
-const build = new Job("ubuntu-latest")
-  .needs(["test"])
+const build = new Job("ubuntu-latest", {
+  needs: ["test"],
+})
   .addStep(checkout({}))
   .addStep(setupNode({ with: { "node-version": "20" } }))
   .addStep({ run: "npm ci" })

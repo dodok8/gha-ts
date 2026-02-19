@@ -256,7 +256,7 @@ const myAction = getAction("./my-action");
 }))
 ```
 
-먼저 액션을 생성해야 합니다. [CompositeAction](./api.md#compositeaction)을 참조하세요.
+먼저 액션을 생성해야 합니다. [Action](./api.md#action)을 참조하세요.
 
 ## 액션 출력
 

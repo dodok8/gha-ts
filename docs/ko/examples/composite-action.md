@@ -2,20 +2,20 @@
 
 재사용 가능한 컴포지트 액션과 작업을 만듭니다.
 
-## CompositeJob
+## 재사용 가능한 Job 템플릿
 
-재사용 가능한 작업 템플릿을 만듭니다.
+`Job`을 서브클래싱하여 재사용 가능한 작업 템플릿을 만듭니다.
 
 ### 기본 예제
 
 ```typescript
-import { CompositeJob, getAction } from "../../generated/index.js";
+import { Job, getAction } from "../../generated/index.js";
 
 const checkout = getAction("actions/checkout@v5");
 const setupNode = getAction("actions/setup-node@v4");
 
 // 재사용 가능한 작업 클래스 정의
-class NodeTestJob extends CompositeJob {
+class NodeTestJob extends Job {
   constructor(nodeVersion: string) {
     super("ubuntu-latest");
 
@@ -48,21 +48,22 @@ workflow.build("test-matrix");
 ### 고급 예제: 매개변수화된 배포 작업
 
 ```typescript
-class DeployJob extends CompositeJob {
+class DeployJob extends Job {
   constructor(
     environment: "staging" | "production",
     region: string = "us-east-1"
   ) {
-    super("ubuntu-latest");
-
-    this
-      .env({
+    super("ubuntu-latest", {
+      env: {
         ENVIRONMENT: environment,
         REGION: region,
         API_URL: environment === "production"
           ? "https://api.example.com"
           : "https://staging.api.example.com",
-      })
+      },
+    });
+
+    this
       .addStep(checkout({ name: "Checkout code" }))
       .addStep(setupNode({
         name: "Setup Node.js",
@@ -95,16 +96,39 @@ const workflow = new Workflow({
   .addJob("deploy-staging-us", new DeployJob("staging", "us-east-1"))
   .addJob("deploy-staging-eu", new DeployJob("staging", "eu-west-1"))
   .addJob("deploy-production",
-    new DeployJob("production", "us-east-1")
-      .needs(["deploy-staging-us", "deploy-staging-eu"])
-  );
+    new DeployJob("production", "us-east-1"));
 
 workflow.build("deploy");
 ```
 
+::: tip
+`deploy-production`이 `deploy-staging-us`와 `deploy-staging-eu`에 의존해야 하는 경우, 생성자 옵션에 `needs`를 전달하세요:
+
+```typescript
+class DeployJob extends Job {
+  constructor(
+    environment: "staging" | "production",
+    region: string = "us-east-1",
+    deps?: string[]
+  ) {
+    super("ubuntu-latest", {
+      env: { ENVIRONMENT: environment, REGION: region },
+      ...(deps ? { needs: deps } : {}),
+    });
+    // ...
+  }
+}
+
+// 워크플로우에서 사용
+.addJob("deploy-production",
+  new DeployJob("production", "us-east-1",
+    ["deploy-staging-us", "deploy-staging-eu"]));
+```
+:::
+
 ## 장점
 
-Composite action과 CompositeJob을 사용하면 패턴을 한 번 정의하고 여러 워크플로우에서 재사용할 수 있습니다. 액션 입력과 작업 매개변수가 타입 체크되어 리팩토링이 안전합니다. 공유 정의를 수정하면 모든 호출처에 반영됩니다.
+Composite action과 `Job` 서브클래싱을 사용하면 패턴을 한 번 정의하고 여러 워크플로우에서 재사용할 수 있습니다. 액션 입력과 작업 매개변수가 타입 체크되어 리팩토링이 안전합니다. 공유 정의를 수정하면 모든 호출처에 반영됩니다.
 
 ## 더 읽어보기
 

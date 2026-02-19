@@ -368,102 +368,12 @@ To use a Docker Hub image directly, prefix `image` with `docker://`:
 
 ---
 
-### `CompositeJob`
+### `WorkflowCall`
 
-Create reusable job templates via TypeScript class inheritance. `CompositeJob` extends `Job`, so all `Job` methods are available.
-
-```typescript
-class CompositeJob<O extends Record<string, string> = {}> extends Job<O> {
-  constructor(runsOn: string | string[], options?: Partial<JobDefinition>)
-}
-```
-
-Unlike `Job`, `CompositeJob` is designed to be subclassed with `extends` to create domain-specific, parameterized job templates. It produces the same YAML output as a regular `Job`.
-
-::: tip CompositeJob vs Job
-Use `Job` directly for one-off jobs. Use `CompositeJob` when you want to create a **reusable class** that encapsulates a common job pattern with parameters.
-:::
-
-#### Example
-
-```ts twoslash
-// @filename: workflows/example.ts
-// ---cut---
-import { CompositeJob, getAction, Workflow } from "../generated/index.js";
-
-const checkout = getAction("actions/checkout@v5");
-const setupNode = getAction("actions/setup-node@v4");
-
-// Define a reusable job template
-class NodeTestJob extends CompositeJob {
-  constructor(nodeVersion: string) {
-    super("ubuntu-latest");
-
-    this
-      .addStep(checkout({}))
-      .addStep(setupNode({
-        with: {
-          "node-version": nodeVersion,
-        },
-      }))
-      .addStep({ run: "npm ci" })
-      .addStep({ run: "npm test" });
-  }
-}
-
-// Use in workflows
-const workflow = new Workflow({
-  name: "Test Matrix",
-  on: { push: { branches: ["main"] } },
-})
-  .addJob("test-node-18", new NodeTestJob("18"))
-  .addJob("test-node-20", new NodeTestJob("20"))
-  .addJob("test-node-22", new NodeTestJob("22"));
-```
-
-You can also create more complex reusable jobs:
+Call a [reusable workflow](https://docs.github.com/en/actions/using-workflows/reusing-workflows) defined in another repository or file. Unlike `Job`, a `WorkflowCall` has no `steps` — it delegates entirely to the referenced workflow via `uses`.
 
 ```typescript
-class DeployJob extends CompositeJob {
-  constructor(environment: "staging" | "production") {
-    super("ubuntu-latest");
-
-    this
-      .env({
-        ENVIRONMENT: environment,
-        API_URL: environment === "production"
-          ? "https://api.example.com"
-          : "https://staging.api.example.com",
-      })
-      .addStep(checkout({}))
-      .addStep(setupNode({ with: { "node-version": "20" } }))
-      .addStep({
-        name: "Deploy",
-        run: `npm run deploy:${environment}`,
-        env: {
-          DEPLOY_TOKEN: "${{ secrets.DEPLOY_TOKEN }}",
-        },
-      });
-  }
-}
-
-// Use in workflow
-const workflow = new Workflow({
-  name: "Deploy",
-  on: { push: { tags: ["v*"] } },
-})
-  .addJob("deploy-staging", new DeployJob("staging"))
-  .addJob("deploy-production", new DeployJob("production").needs(["deploy-staging"]));
-```
-
----
-
-### `CallJob`
-
-Call a [reusable workflow](https://docs.github.com/en/actions/using-workflows/reusing-workflows) defined in another repository or file. Unlike `Job`, a `CallJob` has no `steps` — it delegates entirely to the referenced workflow via `uses`.
-
-```typescript
-class CallJob {
+class WorkflowCall {
   constructor(uses: string)
   with(inputs: Record<string, unknown>): this
   secrets(s: Record<string, unknown> | 'inherit'): this
@@ -487,9 +397,9 @@ class CallJob {
 ```ts twoslash
 // @filename: workflows/example.ts
 // ---cut---
-import { CallJob, Workflow } from "../generated/index.js";
+import { WorkflowCall, Workflow } from "../generated/index.js";
 
-const deploy = new CallJob("octo-org/deploy/.github/workflows/deploy.yml@main")
+const deploy = new WorkflowCall("octo-org/deploy/.github/workflows/deploy.yml@main")
   .with({ environment: "production" })
   .secrets("inherit")
   .needs(["build"]);
@@ -518,30 +428,30 @@ jobs:
 
 ---
 
-### `CallAction`
+### `ActionRef`
 
 Reference a local composite or JavaScript action built by gaji, for use as a step in a job.
 
 ```typescript
-class CallAction {
+class ActionRef {
   constructor(uses: string)
-  static from(action: CompositeAction | JavaScriptAction | DockerAction): CallAction
+  static from(action: Action | NodeAction | DockerAction): ActionRef
   toJSON(): Step
 }
 ```
 
 | Method | Description |
 |--------|-------------|
-| `from(action)` | Create a `CallAction` from a `CompositeAction`, `JavaScriptAction`, or `DockerAction` instance. Automatically resolves the `.github/actions/<id>` path. |
+| `from(action)` | Create an `ActionRef` from an `Action`, `NodeAction`, or `DockerAction` instance. Automatically resolves the `.github/actions/<id>` path. |
 
 #### Example
 
 ```ts twoslash
 // @filename: workflows/example.ts
 // ---cut---
-import { CompositeAction, CallAction, Job } from "../generated/index.js";
+import { Action, ActionRef, Job } from "../generated/index.js";
 
-const setupEnv = new CompositeAction({
+const setupEnv = new Action({
   name: "Setup",
   description: "Setup environment",
 });
@@ -549,7 +459,7 @@ setupEnv.build("setup-env");
 
 const job = new Job("ubuntu-latest")
   .addStep({
-    ...CallAction.from(setupEnv).toJSON(),
+    ...ActionRef.from(setupEnv).toJSON(),
     with: { "node-version": "20" },
   });
 ```
@@ -732,7 +642,7 @@ interface JobStrategy {
 
 ### `ActionInput`
 
-Action input definition (for CompositeAction).
+Action input definition (for Action).
 
 ```typescript
 interface ActionInput {
@@ -744,7 +654,7 @@ interface ActionInput {
 
 ### `ActionOutput`
 
-Action output definition (for CompositeAction).
+Action output definition (for Action).
 
 ```typescript
 interface ActionOutput {
@@ -771,8 +681,7 @@ const test = new Job("ubuntu-latest")
   .addStep({ run: "npm ci" })
   .addStep({ run: "npm test" });
 
-const build = new Job("ubuntu-latest")
-  .needs(["test"])
+const build = new Job("ubuntu-latest", { needs: ["test"] })
   .addStep(checkout({}))
   .addStep(setupNode({ with: { "node-version": "20" } }))
   .addStep({ run: "npm ci" })

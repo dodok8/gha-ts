@@ -258,7 +258,7 @@ const myAction = getAction("./my-action");
 }))
 ```
 
-Make sure to create the action first. See [CompositeAction](./api.md#compositeaction).
+Make sure to create the action first. See [Action](./api.md#action).
 
 ## Action Outputs
 

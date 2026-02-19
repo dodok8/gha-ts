@@ -236,14 +236,13 @@ const workflow = new Workflow({
 
 ### Job Dependencies
 
-Use `.needs()` to create job dependencies:
+Use the `needs` option in the constructor to create job dependencies:
 
 ```typescript
 const test = new Job("ubuntu-latest")
   .addStep({ run: "npm test" });
 
-const deploy = new Job("ubuntu-latest")
-  .needs(["test"])  // Wait for test job
+const deploy = new Job("ubuntu-latest", { needs: ["test"] })  // Wait for test job
   .addStep({ run: "npm run deploy" });
 
 const workflow = new Workflow({
@@ -256,39 +255,40 @@ const workflow = new Workflow({
 
 ## Matrix Builds
 
-Use `.strategy()` to run a job across multiple configurations:
+Use the `strategy` option in the constructor to run a job across multiple configurations:
 
 ```typescript
-const test = new Job("${{ matrix.os }}")
-  .strategy({
+const test = new Job("${{ matrix.os }}", {
+  strategy: {
     matrix: {
       os: ["ubuntu-latest", "macos-latest", "windows-latest"],
       node: ["18", "20", "22"],
     },
-  })
+  },
+})
 ```
 
 For a complete matrix build example with generated YAML, see [Matrix Build Example](/examples/matrix-build).
 
 ## Composite Actions
 
-Create reusable [composite actions](https://docs.github.com/en/actions/sharing-automations/creating-actions/creating-a-composite-action) using `CompositeAction`. Define inputs, add steps, and call `.build()` to generate `action.yml` in your repository.
+Create reusable [composite actions](https://docs.github.com/en/actions/sharing-automations/creating-actions/creating-a-composite-action) using `Action`. Define inputs, add steps, and call `.build()` to generate `action.yml` in your repository.
 
-For a complete example, see [Composite Action Example](/examples/composite-action). For the full API, see [CompositeAction](/reference/api#compositeaction).
+For a complete example, see [Composite Action Example](/examples/composite-action). For the full API, see [Action](/reference/api#action).
 
-## CompositeJob
+## Reusable Job Templates
 
-`CompositeJob` extends `Job` and is designed to be subclassed. Use it to create reusable, parameterized job templates:
+`Job` can be subclassed directly to create reusable, parameterized job templates:
 
 ```ts twoslash
 // @filename: workflows/example.ts
 // ---cut---
-import { CompositeJob, getAction, Workflow } from "../generated/index.js";
+import { Job, getAction, Workflow } from "../generated/index.js";
 
 const checkout = getAction("actions/checkout@v5");
 const setupNode = getAction("actions/setup-node@v4");
 
-class NodeTestJob extends CompositeJob {
+class NodeTestJob extends Job {
   constructor(nodeVersion: string) {
     super("ubuntu-latest");
     this
@@ -300,11 +300,11 @@ class NodeTestJob extends CompositeJob {
 }
 ```
 
-For the full API reference and advanced patterns (e.g., `DeployJob`), see [CompositeJob](/reference/api#compositejob).
+For advanced patterns (e.g., `DeployJob`), see [Job](/reference/api#job).
 
-## Full Example: Per-environment Deploy with CallJob
+## Full Example: Per-environment Deploy with WorkflowCall
 
-A pattern where you create a reusable workflow (`workflow_call`) and call it per environment with `CallJob`.
+A pattern where you create a reusable workflow (`workflow_call`) and call it per environment with `WorkflowCall`.
 
 First, write a reusable workflow containing the deploy steps. It receives the environment name via `workflow_call` inputs.
 
@@ -355,24 +355,24 @@ const workflow = new Workflow({
 workflow.build("publish");
 ```
 
-Next, use `CallJob` to call this workflow for each environment. Use `needs` to enforce the order alpha → staging → live:
+Next, use `WorkflowCall` to call this workflow for each environment. Use `needs` to enforce the order alpha → staging → live:
 
 ```ts twoslash
 // @noErrors
 // @filename: workflows/release.ts
 // ---cut---
-import { CallJob, Workflow } from "../generated/index.js";
+import { WorkflowCall, Workflow } from "../generated/index.js";
 
-const alpha = new CallJob("./.github/workflows/publish.yml")
+const alpha = new WorkflowCall("./.github/workflows/publish.yml")
   .with({ environment: "alpha" })
   .secrets("inherit");
 
-const staging = new CallJob("./.github/workflows/publish.yml")
+const staging = new WorkflowCall("./.github/workflows/publish.yml")
   .with({ environment: "staging" })
   .secrets("inherit")
   .needs(["publish-alpha"]);
 
-const live = new CallJob("./.github/workflows/publish.yml")
+const live = new WorkflowCall("./.github/workflows/publish.yml")
   .with({ environment: "live" })
   .secrets("inherit")
   .needs(["publish-staging"]);
@@ -413,10 +413,11 @@ const workflow = new Workflow({
 ### Job-level
 
 ```typescript
-const job = new Job("ubuntu-latest")
-  .env({
+const job = new Job("ubuntu-latest", {
+  env: {
     DATABASE_URL: "${{ secrets.DATABASE_URL }}",
-  });
+  },
+});
 ```
 
 ### Step-level
@@ -467,8 +468,7 @@ const buildOutputs = jobOutputs("build", build);
 // buildOutputs.ref → "${{ needs.build.outputs.ref }}"
 // buildOutputs.sha → "${{ needs.build.outputs.sha }}"
 
-const deploy = new Job("ubuntu-latest")
-  .needs("build")
+const deploy = new Job("ubuntu-latest", { needs: ["build"] })
   .addStep({ run: `deploy --ref ${buildOutputs.ref}` });
 
 const workflow = new Workflow({
@@ -493,8 +493,7 @@ const setup = new Job("ubuntu-latest")
 
 const setupOutputs = jobOutputs("setup", setup);
 
-const deploy = new Job("ubuntu-latest")
-  .needs("setup")
+const deploy = new Job("ubuntu-latest", { needs: ["setup"] })
   .addStep({ run: `deploy --version ${setupOutputs.version}` });
 ```
 
