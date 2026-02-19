@@ -562,6 +562,271 @@ Add `defineConfig` declaration to `CLASS_DECLARATIONS_TEMPLATE`.
 - `docs/guide/migration.md`: Add `.gaji.toml` → `gaji.config.ts` migration instructions
 - `docs/ko/` mirrors: Apply same config documentation changes to Korean docs
 
+### Documentation Change Examples
+
+Below are concrete before/after examples for each major documentation change.
+
+#### API Reference: `addStep` section (docs/reference/api.md)
+
+Before:
+```typescript
+addStep(step: JobStep): this
+```
+> Append a step to the job.
+
+After:
+```typescript
+// Direct step — no context change
+addStep(step: JobStep): Job<Cx, O>
+// Action step with id — expands context with step outputs
+addStep<Id extends string, StepO>(step: ActionStep<StepO, Id>): Job<Cx & Record<Id, StepO>, O>
+// Callback — access previous step outputs via cx
+addStep(stepFn: (cx: Cx) => JobStep): Job<Cx, O>
+addStep<Id extends string, StepO>(stepFn: (cx: Cx) => ActionStep<StepO, Id>): Job<Cx & Record<Id, StepO>, O>
+```
+
+Example:
+```typescript
+const checkout = getAction("actions/checkout@v5");
+
+new Job("ubuntu-latest")
+  .addStep(checkout({ id: "co" }))
+  .addStep((cx) => ({
+    name: "Use ref",
+    run: "echo " + cx.co.ref,   // "${{ steps.co.outputs.ref }}"
+  }))
+  .outputs((cx) => ({
+    ref: cx.co.ref,              // "${{ steps.co.outputs.ref }}"
+  }));
+```
+
+#### Outputs section (docs/guide/writing-workflows.md)
+
+Before:
+```typescript
+const checkout = getAction("actions/checkout@v5");
+const step = checkout({ id: "co" });
+
+const build = new Job("ubuntu-latest")
+  .addStep(step)
+  .outputs({ ref: step.outputs.ref });
+
+const buildOutputs = jobOutputs("build", build);
+
+const deploy = new Job("ubuntu-latest")
+  .needs("build")
+  .addStep({ run: "echo " + buildOutputs.ref });
+```
+
+After:
+```typescript
+const checkout = getAction("actions/checkout@v5");
+
+new Workflow({ name: "CI", on: { push: {} } })
+  .addJob("build",
+    new Job("ubuntu-latest")
+      .addStep(checkout({ id: "co" }))
+      .outputs((cx) => ({ ref: cx.co.ref }))
+  )
+  .addJob("deploy", (cx) =>
+    new Job("ubuntu-latest")
+      .needs("build")
+      .addStep({ run: "echo " + cx.build.ref })
+  )
+  .build("ci");
+```
+
+#### Action section (docs/examples/composite-action.md)
+
+Before:
+```typescript
+import { CompositeAction, getAction } from "../generated/index.js";
+
+const checkout = getAction("actions/checkout@v5");
+const setupNode = getAction("actions/setup-node@v4");
+
+const action = new CompositeAction({
+  name: "Setup",
+  description: "Setup Node.js project",
+});
+
+action
+  .addStep(checkout({}))
+  .addStep(setupNode({ with: { "node-version": "20" } }))
+  .addStep({ run: "npm ci", shell: "bash" });
+
+action.build("setup");
+```
+
+After:
+```typescript
+import { Action, getAction } from "../generated/index.js";
+
+const checkout = getAction("actions/checkout@v5");
+const setupNode = getAction("actions/setup-node@v4");
+
+const action = new Action({
+  name: "Setup",
+  description: "Setup Node.js project",
+});
+
+action
+  .addStep(checkout({}))
+  .addStep(setupNode({ with: { "node-version": "20" } }))
+  .addStep({ run: "npm ci", shell: "bash" });
+
+action.build("setup");
+```
+
+#### Job inheritance section (docs/examples/composite-action.md)
+
+Before:
+```typescript
+import { CompositeJob, getAction, Workflow } from "../generated/index.js";
+
+const checkout = getAction("actions/checkout@v5");
+
+class DeployJob extends CompositeJob {
+  constructor(env: string) {
+    super("ubuntu-latest");
+    this.addStep(checkout({})).addStep({ run: "deploy " + env });
+  }
+}
+
+new Workflow({ name: "Deploy", on: { push: { branches: ["main"] } } })
+  .addJob("staging", new DeployJob("staging"))
+  .addJob("production", new DeployJob("production"))
+  .build("deploy");
+```
+
+After:
+```typescript
+import { Job, getAction, Workflow } from "../generated/index.js";
+
+const checkout = getAction("actions/checkout@v5");
+
+class DeployJob extends Job {
+  constructor(env: string) {
+    super("ubuntu-latest");
+    this.addStep(checkout({})).addStep({ run: "deploy " + env });
+  }
+}
+
+new Workflow({ name: "Deploy", on: { push: { branches: ["main"] } } })
+  .addJob("staging", new DeployJob("staging"))
+  .addJob("production", new DeployJob("production"))
+  .build("deploy");
+```
+
+#### NodeAction section (docs/examples/javascript-action.md)
+
+Before:
+```typescript
+import { JavaScriptAction, CallAction } from "../generated/index.js";
+
+const action = new JavaScriptAction(
+  { name: "Greet", description: "Greet someone" },
+  { using: "node20", main: "index.js" }
+);
+
+action.build("greet");
+
+// Reference in a workflow
+const greet = CallAction.from(action);
+```
+
+After:
+```typescript
+import { NodeAction, ActionRef } from "../generated/index.js";
+
+const action = new NodeAction(
+  { name: "Greet", description: "Greet someone" },
+  { using: "node20", main: "index.js" }
+);
+
+action.build("greet");
+
+// Reference in a workflow
+const greet = ActionRef.from(action);
+```
+
+#### WorkflowCall section (docs/guide/writing-workflows.md)
+
+Before:
+```typescript
+import { CallJob, Workflow } from "../generated/index.js";
+
+const tests = new CallJob("org/repo/.github/workflows/test.yml@main", {
+  with: { environment: "staging" },
+});
+
+new Workflow({ name: "CI", on: { push: {} } })
+  .addJob("tests", tests)
+  .build("ci");
+```
+
+After:
+```typescript
+import { WorkflowCall, Workflow } from "../generated/index.js";
+
+const tests = new WorkflowCall("org/repo/.github/workflows/test.yml@main", {
+  with: { environment: "staging" },
+});
+
+new Workflow({ name: "CI", on: { push: {} } })
+  .addJob("tests", tests)
+  .build("ci");
+```
+
+#### Configuration section (docs/guide/writing-workflows.md or new config page)
+
+Before:
+```toml
+# .gaji.toml
+[project]
+workflows_dir = "workflows"
+output_dir = ".github"
+
+[build]
+cache_ttl_days = 14
+```
+
+After:
+```typescript
+// gaji.config.ts
+import { defineConfig } from "./generated/index.js";
+
+export default defineConfig({
+    workflows: "workflows",
+    output: ".github",
+    build: {
+        cacheTtlDays: 14,
+    },
+});
+```
+
+#### Migration guide update (docs/guide/migration.md)
+
+Before:
+> When migrating `action.yml` files, gaji converts composite actions to `CompositeAction` and JavaScript actions to `JavaScriptAction`.
+
+After:
+> When migrating `action.yml` files, gaji converts composite actions to `Action` and JavaScript actions to `NodeAction`.
+
+Before:
+```typescript
+// Generated from composite action.yml
+import { CompositeAction, getAction } from "../generated/index.js";
+const action = new CompositeAction({ name: "...", description: "..." });
+```
+
+After:
+```typescript
+// Generated from composite action.yml
+import { Action, getAction } from "../generated/index.js";
+const action = new Action({ name: "...", description: "..." });
+```
+
 ## Files Modified
 
 | File | Changes |
