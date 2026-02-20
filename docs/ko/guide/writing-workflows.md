@@ -77,20 +77,20 @@ const step = checkout({
 - ✅ action.yml의 문서
 - ✅ 기본값 표시
 
-## CompositeJob
+## Job 상속
 
-`CompositeJob`은 `Job`을 상속하며, 서브클래싱을 통해 재사용 가능한 파라미터화된 Job 템플릿을 만들 때 사용합니다:
+`Job`을 상속하여 재사용 가능한 파라미터화된 Job 템플릿을 만들 수 있습니다:
 
 ```ts twoslash
 // @noErrors
 // @filename: workflows/example.ts
 // ---cut---
-import { CompositeJob, getAction } from "../generated/index.js";
+import { Job, getAction } from "../generated/index.js";
 
 const checkout = getAction("actions/checkout@v5");
 const setupNode = getAction("actions/setup-node@v4");
 
-class NodeTestJob extends CompositeJob {
+class NodeTestJob extends Job {
   constructor(nodeVersion: string) {
     super("ubuntu-latest");
     this
@@ -102,11 +102,11 @@ class NodeTestJob extends CompositeJob {
 }
 ```
 
-전체 API 레퍼런스와 고급 패턴(예: `DeployJob`)은 [CompositeJob](/ko/reference/api#compositejob)을 참조하세요.
+전체 API 레퍼런스와 고급 패턴(예: `DeployJob`)은 [Job 상속](/ko/reference/api#job-상속)을 참조하세요.
 
-## 전체 예제: CallJob과 조합하여 환경별 배포 워크플로우 구성
+## 전체 예제: WorkflowCall과 조합하여 환경별 배포 워크플로우 구성
 
-재사용 가능한 워크플로우(`workflow_call`)를 만든 뒤, `CallJob`으로 환경마다 호출하는 패턴입니다.
+재사용 가능한 워크플로우(`workflow_call`)를 만든 뒤, `WorkflowCall`로 환경마다 호출하는 패턴입니다.
 
 먼저, 배포 작업을 담은 재사용 가능한 워크플로우를 작성합니다. `workflow_call`의 `inputs`로 환경 이름을 받습니다.
 
@@ -157,24 +157,24 @@ const workflow = new Workflow({
 workflow.build("publish");
 ```
 
-다음으로, `CallJob`을 사용하여 이 워크플로우를 환경별로 호출합니다. `needs`로 alpha → staging → live 순서를 지정합니다:
+다음으로, `WorkflowCall`을 사용하여 이 워크플로우를 환경별로 호출합니다. `needs`로 alpha → staging → live 순서를 지정합니다:
 
 ```ts twoslash
 // @noErrors
 // @filename: workflows/release.ts
 // ---cut---
-import { CallJob, Workflow } from "../generated/index.js";
+import { WorkflowCall, Workflow } from "../generated/index.js";
 
-const alpha = new CallJob("./.github/workflows/publish.yml")
+const alpha = new WorkflowCall("./.github/workflows/publish.yml")
   .with({ environment: "alpha" })
   .secrets("inherit");
 
-const staging = new CallJob("./.github/workflows/publish.yml")
+const staging = new WorkflowCall("./.github/workflows/publish.yml")
   .with({ environment: "staging" })
   .secrets("inherit")
   .needs(["publish-alpha"]);
 
-const live = new CallJob("./.github/workflows/publish.yml")
+const live = new WorkflowCall("./.github/workflows/publish.yml")
   .with({ environment: "live" })
   .secrets("inherit")
   .needs(["publish-staging"]);

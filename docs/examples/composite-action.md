@@ -13,13 +13,13 @@ Create `actions/setup-env/action.ts`:
 ```ts twoslash
 // @filename: examples/workflows/example.ts
 // ---cut---
-import { CompositeAction, getAction } from "../../generated/index.js";
+import { Action, getAction } from "../../generated/index.js";
 
 const checkout = getAction("actions/checkout@v5");
 const setupNode = getAction("actions/setup-node@v4");
 const cache = getAction("actions/cache@v4");
 
-const setupEnv = new CompositeAction({
+const setupEnv = new Action({
   name: "Setup Environment",
   description: "Setup Node.js and install dependencies",
   inputs: {
@@ -101,22 +101,22 @@ const workflow = new Workflow({
 workflow.build("ci");
 ```
 
-## Composite Job
+## Job Inheritance
 
-Create reusable job templates with `CompositeJob`.
+Create reusable job templates by extending `Job`.
 
 ### Basic Example
 
 ```ts twoslash
 // @filename: examples/workflows/example.ts
 // ---cut---
-import { CompositeJob, getAction, Workflow } from "../../generated/index.js";
+import { Job, getAction, Workflow } from "../../generated/index.js";
 
 const checkout = getAction("actions/checkout@v5");
 const setupNode = getAction("actions/setup-node@v4");
 
 // Define a reusable job class
-class NodeTestJob extends CompositeJob {
+class NodeTestJob extends Job {
   constructor(nodeVersion: string) {
     super("ubuntu-latest");
 
@@ -159,12 +159,12 @@ workflow.build("test-matrix");
 ```ts twoslash
 // @filename: examples/workflows/example.ts
 // ---cut---
-import { CompositeJob, getAction, Workflow } from "../../generated/index.js";
+import { Job, getAction, Workflow } from "../../generated/index.js";
 
 const checkout = getAction("actions/checkout@v5");
 const setupNode = getAction("actions/setup-node@v4");
 
-class DeployJob extends CompositeJob {
+class DeployJob extends Job {
   constructor(
     environment: "staging" | "production",
     region: string = "us-east-1"
@@ -232,7 +232,7 @@ workflow.build("deploy");
 ```ts twoslash
 // @filename: examples/workflows/example.ts
 // ---cut---
-import { CompositeJob, getAction, Workflow } from "../../generated/index.js";
+import { Job, getAction, Workflow } from "../../generated/index.js";
 
 const checkout = getAction("actions/checkout@v5");
 const setupNode = getAction("actions/setup-node@v4");
@@ -246,7 +246,7 @@ interface TestOptions {
   additionalTests?: string[];
 }
 
-class TestSuiteJob extends CompositeJob {
+class TestSuiteJob extends Job {
   constructor(options: TestOptions) {
     super("ubuntu-latest");
 
@@ -333,7 +333,7 @@ workflow.build("full-test");
 
 ## Benefits
 
-Composite actions and CompositeJob let you define patterns once and reuse them across workflows. Action inputs and job parameters are type-checked, so refactoring is safer. Updates to the shared definition propagate to all callers.
+Composite actions and Job inheritance let you define patterns once and reuse them across workflows. Action inputs and job parameters are type-checked, so refactoring is safer. Updates to the shared definition propagate to all callers.
 
 ## Further Reading
 

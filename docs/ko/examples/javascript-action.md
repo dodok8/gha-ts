@@ -7,9 +7,9 @@ Node.js 기반 GitHub Actions를 만들고 워크플로우에서 사용합니다
 `workflows/hello.ts` 생성:
 
 ```typescript
-import { JavaScriptAction } from "../generated/index.js";
+import { NodeAction } from "../generated/index.js";
 
-const action = new JavaScriptAction(
+const action = new NodeAction(
   {
     name: "Hello World",
     description: "Greet someone and record the time",
@@ -48,10 +48,10 @@ gaji build
 같은 파일에서 액션 정의와 이를 사용하는 워크플로우를 함께 작성할 수 있습니다:
 
 ```typescript
-import { CallAction, JavaScriptAction, Job, Workflow } from "../generated/index.js";
+import { ActionRef, NodeAction, Job, Workflow } from "../generated/index.js";
 
 // 액션 정의
-const action = new JavaScriptAction(
+const action = new NodeAction(
   {
     name: "Hello World",
     description: "Greet someone and record the time",
@@ -81,7 +81,7 @@ const helloWorldJob = new Job("ubuntu-latest")
   .addStep({
     name: "Hello world action step",
     id: "hello",
-    ...CallAction.from(action).toJSON(),
+    ...ActionRef.from(action).toJSON(),
     with: {
       "who-to-greet": "Mona the Octocat",
     },
@@ -110,7 +110,7 @@ workflow.build("use-js-action");
 JavaScript 액션은 라이프사이클 훅을 지원합니다:
 
 ```typescript
-const action = new JavaScriptAction(
+const action = new NodeAction(
   {
     name: "Setup and Cleanup",
     description: "Action with pre and post scripts",
@@ -127,15 +127,15 @@ const action = new JavaScriptAction(
 action.build("setup-cleanup");
 ```
 
-## `CallAction`으로 참조
+## `ActionRef`으로 참조
 
-`CallAction.from()`을 사용하여 로컬에서 정의한 액션을 워크플로우 스텝에서 참조할 수 있습니다:
+`ActionRef.from()`을 사용하여 로컬에서 정의한 액션을 워크플로우 스텝에서 참조할 수 있습니다:
 
 ```typescript
 const step = {
   name: "Run my action",
   id: "my-step",
-  ...CallAction.from(action).toJSON(),
+  ...ActionRef.from(action).toJSON(),
   with: { input1: "value1" },
 };
 ```

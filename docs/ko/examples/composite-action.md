@@ -2,20 +2,20 @@
 
 재사용 가능한 컴포지트 액션과 작업을 만듭니다.
 
-## CompositeJob
+## Job 상속
 
 재사용 가능한 작업 템플릿을 만듭니다.
 
 ### 기본 예제
 
 ```typescript
-import { CompositeJob, getAction } from "../../generated/index.js";
+import { Job, getAction } from "../../generated/index.js";
 
 const checkout = getAction("actions/checkout@v5");
 const setupNode = getAction("actions/setup-node@v4");
 
 // 재사용 가능한 작업 클래스 정의
-class NodeTestJob extends CompositeJob {
+class NodeTestJob extends Job {
   constructor(nodeVersion: string) {
     super("ubuntu-latest");
 
@@ -48,7 +48,7 @@ workflow.build("test-matrix");
 ### 고급 예제: 매개변수화된 배포 작업
 
 ```typescript
-class DeployJob extends CompositeJob {
+class DeployJob extends Job {
   constructor(
     environment: "staging" | "production",
     region: string = "us-east-1"
@@ -104,7 +104,7 @@ workflow.build("deploy");
 
 ## 장점
 
-Composite action과 CompositeJob을 사용하면 패턴을 한 번 정의하고 여러 워크플로우에서 재사용할 수 있습니다. 액션 입력과 작업 매개변수가 타입 체크되어 리팩토링이 안전합니다. 공유 정의를 수정하면 모든 호출처에 반영됩니다.
+Composite action과 Job 상속을 사용하면 패턴을 한 번 정의하고 여러 워크플로우에서 재사용할 수 있습니다. 액션 입력과 작업 매개변수가 타입 체크되어 리팩토링이 안전합니다. 공유 정의를 수정하면 모든 호출처에 반영됩니다.
 
 ## 더 읽어보기
 

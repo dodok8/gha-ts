@@ -268,7 +268,7 @@ fn generate_typescript_from_action_yaml(yaml_content: &str, action_id: &str) -> 
     }
 }
 
-/// Generate TypeScript for a CompositeAction.
+/// Generate TypeScript for an Action (composite).
 fn generate_composite_action_ts(action: &serde_yaml::Value, action_id: &str) -> Result<String> {
     let mut ts = String::new();
 
@@ -281,7 +281,7 @@ fn generate_composite_action_ts(action: &serde_yaml::Value, action_id: &str) -> 
     let has_external_actions = !actions.is_empty();
 
     if has_external_actions {
-        ts.push_str("import { getAction, CompositeAction } from \"../generated/index.js\";\n\n");
+        ts.push_str("import { getAction, Action } from \"../generated/index.js\";\n\n");
         for action_ref in &actions {
             let var_name = action_to_var_name(action_ref);
             ts.push_str(&format!(
@@ -291,7 +291,7 @@ fn generate_composite_action_ts(action: &serde_yaml::Value, action_id: &str) -> 
         }
         ts.push('\n');
     } else {
-        ts.push_str("import { CompositeAction } from \"../generated/index.js\";\n\n");
+        ts.push_str("import { Action } from \"../generated/index.js\";\n\n");
     }
 
     // Constructor config
@@ -304,7 +304,7 @@ fn generate_composite_action_ts(action: &serde_yaml::Value, action_id: &str) -> 
         .and_then(|v| v.as_str())
         .unwrap_or("");
 
-    ts.push_str("const action = new CompositeAction({\n");
+    ts.push_str("const action = new Action({\n");
     ts.push_str(&format!("    name: \"{}\",\n", escape_js_string(name)));
     ts.push_str(&format!(
         "    description: \"{}\",\n",
@@ -344,7 +344,7 @@ fn generate_composite_action_ts(action: &serde_yaml::Value, action_id: &str) -> 
     Ok(ts)
 }
 
-/// Generate TypeScript for a JavaScriptAction.
+/// Generate TypeScript for a NodeAction.
 fn generate_javascript_action_ts(
     action: &serde_yaml::Value,
     action_id: &str,
@@ -354,7 +354,7 @@ fn generate_javascript_action_ts(
 
     ts.push_str("// Migrated from YAML by gaji init --migrate\n");
     ts.push_str("// NOTE: This is a basic conversion. Please review and adjust as needed.\n");
-    ts.push_str("import { JavaScriptAction } from \"../generated/index.js\";\n\n");
+    ts.push_str("import { NodeAction } from \"../generated/index.js\";\n\n");
 
     let name = action
         .get("name")
@@ -374,7 +374,7 @@ fn generate_javascript_action_ts(
         .ok_or_else(|| anyhow!("Missing 'runs.main' field"))?;
 
     // Config object
-    ts.push_str("const action = new JavaScriptAction(\n");
+    ts.push_str("const action = new NodeAction(\n");
     ts.push_str("    {\n");
     ts.push_str(&format!("        name: \"{}\",\n", escape_js_string(name)));
     ts.push_str(&format!(
@@ -1104,8 +1104,8 @@ runs:
 "#;
         let ts = generate_typescript_from_action_yaml(yaml_content, "setup-project").unwrap();
 
-        assert!(ts.contains("import { getAction, CompositeAction }"));
-        assert!(ts.contains("new CompositeAction("));
+        assert!(ts.contains("import { getAction, Action }"));
+        assert!(ts.contains("new Action("));
         assert!(ts.contains("name: \"Setup Project\""));
         assert!(ts.contains("description: \"Sets up the project environment\""));
         assert!(ts.contains("action.build(\"setup-project\")"));
@@ -1128,9 +1128,9 @@ runs:
 "#;
         let ts = generate_typescript_from_action_yaml(yaml_content, "simple-action").unwrap();
 
-        assert!(ts.contains("import { CompositeAction } from"));
+        assert!(ts.contains("import { Action } from"));
         assert!(!ts.contains("getAction"));
-        assert!(ts.contains("new CompositeAction("));
+        assert!(ts.contains("new Action("));
         assert!(ts.contains("shell: \"bash\""));
     }
 
@@ -1169,8 +1169,8 @@ runs:
 "#;
         let ts = generate_typescript_from_action_yaml(yaml_content, "my-js-action").unwrap();
 
-        assert!(ts.contains("import { JavaScriptAction }"));
-        assert!(ts.contains("new JavaScriptAction("));
+        assert!(ts.contains("import { NodeAction }"));
+        assert!(ts.contains("new NodeAction("));
         assert!(ts.contains("using: \"node20\""));
         assert!(ts.contains("main: \"dist/index.js\""));
         assert!(ts.contains("pre: \"dist/pre.js\""));

@@ -25,7 +25,7 @@ gaji also migrates existing local actions (`.github/actions/*/action.yml`) to Ty
 gaji init --migrate
 ```
 
-This detects both workflows and actions automatically. Actions are converted to `CompositeAction`, `JavaScriptAction`, or `DockerAction` classes depending on the `runs.using` field.
+This detects both workflows and actions automatically. Actions are converted to `Action`, `NodeAction`, or `DockerAction` classes depending on the `runs.using` field.
 
 ### Composite Action
 
@@ -61,12 +61,12 @@ runs:
 **After** (`workflows/action-setup-env.ts`):
 
 ```typescript
-import { getAction, CompositeAction } from "../generated/index.js";
+import { getAction, Action } from "../generated/index.js";
 
 const checkout = getAction("actions/checkout@v5");
 const cache = getAction("actions/cache@v4");
 
-const action = new CompositeAction({
+const action = new Action({
     name: "Setup Environment",
     description: "Setup Node.js and install dependencies",
     inputs: {
@@ -126,9 +126,9 @@ runs:
 **After** (`workflows/action-notify.ts`):
 
 ```typescript
-import { JavaScriptAction } from "../generated/index.js";
+import { NodeAction } from "../generated/index.js";
 
-const action = new JavaScriptAction(
+const action = new NodeAction(
     {
         name: "Send Notification",
         description: "Send a Slack notification",
@@ -206,8 +206,8 @@ action.build("lint");
 
 | Type       | `runs.using`                 | Migrated To        |
 | ---------- | ---------------------------- | ------------------ |
-| Composite  | `composite`                  | `CompositeAction`  |
-| JavaScript | `node12`, `node16`, `node20` | `JavaScriptAction` |
+| Composite  | `composite`                  | `Action`           |
+| JavaScript | `node12`, `node16`, `node20` | `NodeAction`       |
 | Docker     | `docker`                     | `DockerAction`     |
 
 ## Manual Migration

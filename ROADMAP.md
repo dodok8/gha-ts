@@ -627,38 +627,46 @@ Critical path: Phase 2 (2-3, 2-4) → Phase 3 (3B, 3E) → Phase 4
 
 No dependencies. Each group touches different files.
 
-#### 1A. `src/init/migration.rs` — Class renames
+#### ~~1A. `src/init/migration.rs` — Class renames~~ ✅
 
-- `generate_composite_action_ts()`: `CompositeAction` → `Action` in imports and `new` call
-- `generate_javascript_action_ts()`: `JavaScriptAction` → `NodeAction` in imports and `new` call
-- Update 6 test assertions for new class names
+- ~~`generate_composite_action_ts()`: `CompositeAction` → `Action` in imports and `new` call~~
+- ~~`generate_javascript_action_ts()`: `JavaScriptAction` → `NodeAction` in imports and `new` call~~
+- ~~Update 6 test assertions for new class names~~
 
-#### 1B. `src/executor.rs` — Test rename
+#### 1B. `src/executor.rs` — Test rename (부분 완료)
 
+- ~~doc comment 업데이트: `Test CompositeAction` → `Test Action (composite)`~~
 - Update test `test_composite_action_pipeline` (~line 286): `new CompositeAction(` → `new Action(`
+  - **미완료 사유**: 테스트 JS 코드가 QuickJS 런타임에서 실행되는데, `JOB_WORKFLOW_RUNTIME_TEMPLATE`(Phase 2-4)에 아직 `CompositeAction` 클래스로 정의되어 있어 `new Action(...)`으로 바꾸면 `ReferenceError` 발생. Phase 2-4 완료 후 변경 필요.
 
-#### 1C. `tests/integration.rs` — Existing test renames only
+#### 1C. `tests/integration.rs` — Existing test renames only (부분 완료)
 
-- `test_composite_job_inheritance`: `extends CompositeJob` → `extends Job`
+- ~~`test_composite_job_inheritance`: `extends CompositeJob` → `extends Job`~~
+- ~~doc comment 4건 업데이트~~
 - `test_composite_action_migration_roundtrip`: `new CompositeAction(` → `new Action(`
+  - **미완료 사유**: 1B와 동일. 런타임 템플릿에 `Action` 클래스가 아직 없음.
 - `test_javascript_action_migration_roundtrip`: `new JavaScriptAction(` → `new NodeAction(`
+  - **미완료 사유**: 1B와 동일. 런타임 템플릿에 `NodeAction` 클래스가 아직 없음.
 
-#### 1D. English doc renames
+#### ~~1D. English doc renames~~ ✅
 
 Each file is independent:
-- `docs/examples/composite-action.md`: `CompositeAction` → `Action`, `CompositeJob` → `Job` in all code examples
-- `docs/examples/javascript-action.md`: `JavaScriptAction` → `NodeAction`, `CallAction` → `ActionRef`
-- `docs/guide/migration.md`: class names in migration output descriptions
-- `docs/reference/actions.md`: `CompositeAction` → `Action`, `jobOutputs()` context mentions
+- ~~`docs/examples/composite-action.md`: `CompositeAction` → `Action`, `CompositeJob` → `Job` in all code examples~~
+- ~~`docs/examples/javascript-action.md`: `JavaScriptAction` → `NodeAction`, `CallAction` → `ActionRef`~~
+- ~~`docs/guide/migration.md`: class names in migration output descriptions~~
+- ~~`docs/reference/actions.md`: `CompositeAction` → `Action`, `jobOutputs()` context mentions~~
+- ~~`docs/reference/api.md`: class renames (`CompositeAction` → `Action`, `JavaScriptAction` → `NodeAction`, `CompositeJob` → Job Inheritance, `CallJob` → `WorkflowCall`, `CallAction` → `ActionRef`)~~
+- ~~`docs/guide/writing-workflows.md`: `CompositeAction` → `Action`, `CompositeJob` → Job Inheritance, `CallJob` → `WorkflowCall`~~
 
-#### 1E. Korean docs + README
+#### ~~1E. Korean docs + README~~ ✅
 
-- `docs/ko/reference/api.md`, `docs/ko/guide/writing-workflows.md`, `docs/ko/examples/composite-action.md`, `docs/ko/examples/javascript-action.md`, `docs/ko/guide/migration.md`, `docs/ko/reference/actions.md` — mirror 1D changes
-- `README.md`: `CompositeAction` → `Action`, `CallAction` → `ActionRef`, `CallJob` → `WorkflowCall`
+- ~~`docs/ko/reference/api.md`, `docs/ko/guide/writing-workflows.md`, `docs/ko/examples/composite-action.md`, `docs/ko/examples/javascript-action.md`, `docs/ko/guide/migration.md`, `docs/ko/reference/actions.md` — mirror 1D changes~~
+- ~~`README.md`: `CompositeAction` → `Action`, `CallAction` → `ActionRef`, `CallJob` → `WorkflowCall`~~
 
-### Phase 2 — Core Templates (sequential, single file)
+### Phase 2 — Core Templates (sequential, single file) ⬜ 미착수
 
 All in `src/generator/templates.rs`. Must be done in order since they're in the same file. Can run in parallel with Phase 1.
+Phase 1의 1B/1C에서 미완료된 런타임 클래스 리네임(`CompositeAction→Action`, `JavaScriptAction→NodeAction`)이 이 Phase에서 해결됨.
 
 #### 2-1. `BASE_TYPES_TEMPLATE` — ActionStep Id generic + interface renames (easy)
 
@@ -726,7 +734,7 @@ export function defineConfig(config) { return config; }
 
 Add `defineConfig` declaration to `CLASS_DECLARATIONS_TEMPLATE`.
 
-### Phase 3 — Depends on Phase 2 (all parallel)
+### Phase 3 — Depends on Phase 2 (all parallel) ⬜ 미착수
 
 Each group touches different files. All depend on Phase 2 for the new type/runtime shapes.
 
@@ -778,7 +786,7 @@ Update comment on line 288.
 - Add `GAJI_CONFIG_TEMPLATE` constant for default `gaji.config.ts` content
 - Update `.gitignore` template: replace `.gaji.local.toml` with `gaji.config.local.ts`
 
-### Phase 4 — Depends on Phase 3 (all parallel)
+### Phase 4 — Depends on Phase 3 (all parallel) ⬜ 미착수
 
 #### 4A. `src/init/migration.rs` — TOML → TS config migration (moderate)
 

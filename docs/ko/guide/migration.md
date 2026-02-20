@@ -25,7 +25,7 @@ gaji는 로컬 액션(`.github/actions/*/action.yml`)도 TypeScript로 마이그
 gaji init --migrate
 ```
 
-워크플로우와 액션을 자동으로 감지합니다. `runs.using` 필드에 따라 `CompositeAction`, `JavaScriptAction`, `DockerAction` 클래스로 변환됩니다.
+워크플로우와 액션을 자동으로 감지합니다. `runs.using` 필드에 따라 `Action`, `NodeAction`, `DockerAction` 클래스로 변환됩니다.
 
 ### 컴포지트 액션
 
@@ -61,12 +61,12 @@ runs:
 **변환 후** (`workflows/action-setup-env.ts`):
 
 ```typescript
-import { getAction, CompositeAction } from "../generated/index.js";
+import { getAction, Action } from "../generated/index.js";
 
 const checkout = getAction("actions/checkout@v5");
 const cache = getAction("actions/cache@v4");
 
-const action = new CompositeAction({
+const action = new Action({
     name: "Setup Environment",
     description: "Setup Node.js and install dependencies",
     inputs: {
@@ -126,9 +126,9 @@ runs:
 **변환 후** (`workflows/action-notify.ts`):
 
 ```typescript
-import { JavaScriptAction } from "../generated/index.js";
+import { NodeAction } from "../generated/index.js";
 
-const action = new JavaScriptAction(
+const action = new NodeAction(
     {
         name: "Send Notification",
         description: "Send a Slack notification",
@@ -206,8 +206,8 @@ action.build("lint");
 
 | 타입       | `runs.using`                 | 변환 대상           |
 | ---------- | ---------------------------- | ------------------- |
-| Composite  | `composite`                  | `CompositeAction`   |
-| JavaScript | `node12`, `node16`, `node20` | `JavaScriptAction`  |
+| Composite  | `composite`                  | `Action`            |
+| JavaScript | `node12`, `node16`, `node20` | `NodeAction`        |
 | Docker     | `docker`                     | `DockerAction`      |
 
 ## 수동 마이그레이션

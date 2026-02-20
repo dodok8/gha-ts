@@ -138,9 +138,9 @@ If you're willing to handle the complexity of GitHub Actions triggers (e.g., fil
 Define reusable composite actions and reference them in workflows:
 
 ```typescript
-import { CompositeAction, CallAction, Job, Workflow } from "../generated/index.js";
+import { Action, ActionRef, Job, Workflow } from "../generated/index.js";
 
-const action = new CompositeAction({
+const action = new Action({
   name: "Setup",
   description: "Setup the project environment",
   inputs: {
@@ -152,7 +152,7 @@ action.build("setup");
 
 // Reference the composite action in a workflow
 const job = new Job("ubuntu-latest")
-  .addStep(CallAction.from(action).toJSON());
+  .addStep(ActionRef.from(action).toJSON());
 
 const workflow = new Workflow({
   name: "CI",
@@ -164,12 +164,12 @@ workflow.build("ci");
 
 ### Reusable Workflows
 
-Call reusable workflows using `CallJob`:
+Call reusable workflows using `WorkflowCall`:
 
 ```typescript
-import { CallJob, Workflow } from "../generated/index.js";
+import { WorkflowCall, Workflow } from "../generated/index.js";
 
-const deploy = new CallJob("./.github/workflows/deploy.yml")
+const deploy = new WorkflowCall("./.github/workflows/deploy.yml")
   .with({ environment: "production" })
   .secrets("inherit")
   .needs(["build"]);

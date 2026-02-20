@@ -9,9 +9,9 @@ Create `workflows/hello.ts`:
 ```ts twoslash
 // @filename: workflows/example.ts
 // ---cut---
-import { JavaScriptAction } from "../generated/index.js";
+import { NodeAction } from "../generated/index.js";
 
-const action = new JavaScriptAction(
+const action = new NodeAction(
   {
     name: "Hello World",
     description: "Greet someone and record the time",
@@ -52,10 +52,10 @@ You can define the action and a workflow that uses it in the same file:
 ```ts twoslash
 // @filename: workflows/example.ts
 // ---cut---
-import { CallAction, JavaScriptAction, Job, Workflow } from "../generated/index.js";
+import { ActionRef, NodeAction, Job, Workflow } from "../generated/index.js";
 
 // Define the action
-const action = new JavaScriptAction(
+const action = new NodeAction(
   {
     name: "Hello World",
     description: "Greet someone and record the time",
@@ -85,7 +85,7 @@ const helloWorldJob = new Job("ubuntu-latest")
   .addStep({
     name: "Hello world action step",
     id: "hello",
-    ...CallAction.from(action).toJSON(),
+    ...ActionRef.from(action).toJSON(),
     with: {
       "who-to-greet": "Mona the Octocat",
     },
@@ -114,7 +114,7 @@ This generates both:
 JavaScript actions support lifecycle hooks:
 
 ```typescript
-const action = new JavaScriptAction(
+const action = new NodeAction(
   {
     name: "Setup and Cleanup",
     description: "Action with pre and post scripts",
@@ -131,15 +131,15 @@ const action = new JavaScriptAction(
 action.build("setup-cleanup");
 ```
 
-## Referencing with `CallAction`
+## Referencing with `ActionRef`
 
-Use `CallAction.from()` to reference a locally defined action in a workflow step:
+Use `ActionRef.from()` to reference a locally defined action in a workflow step:
 
 ```typescript
 const step = {
   name: "Run my action",
   id: "my-step",
-  ...CallAction.from(action).toJSON(),
+  ...ActionRef.from(action).toJSON(),
   with: { input1: "value1" },
 };
 ```
