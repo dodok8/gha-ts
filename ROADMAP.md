@@ -2,10 +2,11 @@
 
 ## Context
 
-gaji 1.0 refines the TypeScript API to provide type-safe output access through a builder pattern with context tracking at two levels:
+gaji 1.0 refines the TypeScript API with a callback builder pattern and constructor-only configuration:
 
-1. **Step level**: `Job<Cx>` accumulates step output types. `addStep` callbacks receive a typed context with previous step outputs.
-2. **Job level**: `Workflow<Cx>` accumulates job output types. `addJob` callbacks receive a typed context with previous job outputs (replacing the standalone `jobOutputs` function pattern).
+1. **Step level**: `Job` has a `steps(s => s.add(...))` method. `StepBuilder` accumulates step output types in `Cx`. Callbacks receive previous step outputs via `output`.
+2. **Job level**: `Workflow` has a `jobs(j => j.add(...))` method. `JobBuilder` accumulates job output types in `Cx`. Callbacks receive previous job outputs via `output`.
+3. **Constructor-only config**: Job-level settings (permissions, needs, strategy, etc.) are passed through the constructor, not builder methods. This keeps configuration separate from step definitions.
 
 The current API requires storing step/job references in variables to access outputs; the new API accumulates output types in `Cx` generic parameters so callbacks can access previous outputs through the `output` parameter. Additionally, several class names are simplified, and `CompositeJob` (which is identical to `Job`) is removed.
 
@@ -23,7 +24,7 @@ The current API requires storing step/job references in variables to access outp
 | `DockerAction` | `DockerAction` | Keep |
 | `CallJob` | `WorkflowCall` | Calls a reusable workflow |
 | `CallAction` | `ActionRef` | Reference to a local action |
-| `jobOutputs` | `jobOutputs` | Keep as compatibility helper; primary pattern moves to `Workflow.addJob` context |
+| `jobOutputs` | `jobOutputs` | Keep as compatibility helper; primary pattern moves to `Workflow.jobs()` context |
 
 > Note: Config/runs interfaces (`JavaScriptActionConfig`, `JavaScriptActionRuns`, etc.) are kept as-is. They describe the underlying GitHub Actions metadata format, not user-facing concepts.
 
@@ -56,25 +57,31 @@ new Workflow({ name: "CI", on: { push: {} } })
 const checkout = getAction("actions/checkout@v5");
 
 new Workflow({ name: "CI", on: { push: {} } })
-  .addJob("build",
-    new Job("ubuntu-latest")
-      .addStep(checkout({ id: "co" }))
-      .addStep((output) => ({ name: "Use ref", run: "echo " + output.co.ref }))
-      .outputs((output) => ({ ref: output.co.ref, sha: output.co.commit }))
-  )
-  .addJob("deploy", (output) =>
-    new Job("ubuntu-latest")
-      .needs("build")
-      .addStep({ name: "Deploy", run: "echo " + output.build.ref })
+  .jobs(j => j
+    .add("build",
+      new Job("ubuntu-latest")
+        .steps(s => s
+          .add(checkout({ id: "co" }))
+          .add(output => ({ name: "Use ref", run: "echo " + output.co.ref }))
+        )
+        .outputs(output => ({ ref: output.co.ref, sha: output.co.commit }))
+    )
+    .add("deploy", output =>
+      new Job("ubuntu-latest", { needs: ["build"] })
+        .steps(s => s
+          .add({ name: "Deploy", run: "echo " + output.build.ref })
+        )
+    )
   )
   .build("ci");
 ```
 
 Key differences:
 - No need to store step/job in variables just to reference outputs
-- `addStep((output) => ...)` callback receives accumulated step outputs via `output`
-- `outputs((output) => ...)` callback can also access step outputs
-- `addJob("id", (output) => ...)` callback receives accumulated job outputs via `output`
+- `steps(s => s.add(output => ...))` callback receives accumulated step outputs via `output`
+- `outputs(output => ...)` callback can also access step outputs
+- `jobs(j => j.add("id", output => ...))` callback receives accumulated job outputs via `output`
+- Job config (needs, permissions, strategy) is passed through the constructor
 - Type error if accessing `output.co` when step has no `id`, or `output.build.nonExistent` when output not defined
 
 ### Class renames — Before
@@ -99,9 +106,9 @@ const call = new WorkflowCall("org/repo/.github/workflows/test.yml@main");
 class Deploy extends Job { ... }  // CompositeJob removed, extend Job directly
 ```
 
-### Existing workflows — No changes needed
+### Existing workflows — Migration needed
 ```typescript
-// workflows/ci.ts — unchanged, still works
+// workflows/ci.ts — before
 import { getAction, Job, Workflow } from "../generated/index.js";
 
 const checkout = getAction("actions/checkout@v5");
@@ -114,92 +121,51 @@ new Workflow({ name: "PR", on: { pull_request: { branches: ["main"] } } })
   .build("pr");
 ```
 
+```typescript
+// workflows/ci.ts — after
+import { getAction, Job, Workflow } from "../generated/index.js";
+
+const checkout = getAction("actions/checkout@v5");
+
+new Workflow({ name: "PR", on: { pull_request: { branches: ["main"] } } })
+  .jobs(j => j
+    .add("fmt",
+      new Job("ubuntu-latest")
+        .steps(s => s
+          .add(checkout({}))
+          .add({ run: "cargo fmt --all --check" })
+        )
+    )
+  )
+  .build("pr");
+```
+
 ### Type error examples
 ```typescript
 const checkout = getAction("actions/checkout@v5");
 
 new Job("ubuntu-latest")
-  .addStep(checkout({}))  // no id → no context expansion
-  .addStep((output) => ({
-    run: output.co.ref  // ❌ Type error: Property 'co' does not exist on type '{}'
-  }));
+  .steps(s => s
+    .add(checkout({}))  // no id → no context expansion
+    .add(output => ({
+      run: output.co.ref  // ❌ Type error: Property 'co' does not exist on type '{}'
+    }))
+  );
 
 new Job("ubuntu-latest")
-  .addStep(checkout({ id: "co" }))  // id "co" → context expands with checkout outputs
-  .addStep((output) => ({
-    run: output.co.ref      // ✅ OK: output.co has type CheckoutOutputs
-  }));
-```
-
-## API Design: addStep Callback vs beginSteps/endSteps vs steps() Builder
-
-Three candidate patterns for providing step context. Analysis below.
-
-### Pattern A: addStep Callback (current plan)
-
-`addStep` accepts both direct steps and callbacks. Context accumulates on the same `Job` chain.
-
-```typescript
-const checkout = getAction("actions/checkout@v5");
-const setupNode = getAction("actions/setup-node@v4");
-
-const build = new Job("ubuntu-latest", {
-    permissions: { contents: "read" },
-  })
-  .addStep(checkout({ id: "co" }))
-  .addStep(setupNode({ with: { "node-version": "20" } }))
-  .addStep((output) => ({
-    name: "Show ref",
-    run: "echo " + output.co.ref,
-  }))
-  .outputs((output) => ({ ref: output.co.ref }));
-```
-
-Type flow:
-```
-Job<{}>
-  → .addStep(checkout({ id: "co" }))            → Job<{ co: CheckoutOutputs }>
-  → .addStep(setupNode({ ... }))                 → Job<{ co: CheckoutOutputs }>  (no id → no expansion)
-  → .addStep((output) => ...)                    → Job<{ co: CheckoutOutputs }>  (output.co.ref ✅)
-  → .outputs((output) => ({ ref: output.co.ref })) → Job<{ co: CheckoutOutputs }, { ref: string }>
-```
-
-### Pattern B: beginSteps/endSteps
-
-A separate `StepBuilder` object handles step accumulation. `endSteps()` returns back to `Job` with accumulated context.
-
-```typescript
-const checkout = getAction("actions/checkout@v5");
-const setupNode = getAction("actions/setup-node@v4");
-
-const build = new Job("ubuntu-latest", {
-    permissions: { contents: "read" },
-  })
-  .beginSteps()
-    .addStep(checkout({ id: "co" }))
-    .addStep(setupNode({ with: { "node-version": "20" } }))
-    .addStep((output) => ({
-      name: "Show ref",
-      run: "echo " + output.co.ref,
+  .steps(s => s
+    .add(checkout({ id: "co" }))  // id "co" → context expands with checkout outputs
+    .add(output => ({
+      run: output.co.ref      // ✅ OK: output.co has type CheckoutOutputs
     }))
-  .endSteps()
-  .outputs((output) => ({ ref: output.co.ref }));
+  );
 ```
 
-Type flow:
-```
-Job<{}>
-  → .beginSteps()                                  → StepBuilder<{}>
-    → .addStep(checkout({ id: "co" }))             → StepBuilder<{ co: CheckoutOutputs }>
-    → .addStep(setupNode({ ... }))                  → StepBuilder<{ co: CheckoutOutputs }>
-    → .addStep((output) => ...)                     → StepBuilder<{ co: CheckoutOutputs }>
-  → .endSteps()                                    → Job<{ co: CheckoutOutputs }>
-  → .outputs((output) => ({ ref: output.co.ref })) → Job<{ co: CheckoutOutputs }, { ref: string }>
-```
+## API Design: `steps()` / `jobs()` Callback Builder with Constructor-Only Config
 
-### Pattern C: `steps()` / `jobs()` Callback Builder
+### Pattern
 
-`Job` has a `steps()` method and `Workflow` has a `jobs()` method. Both take a callback receiving a builder (`s` for steps, `j` for jobs) with a short `add()` method. Context callbacks use `output` to access previous step/job outputs.
+`Job` has a `steps()` method and `Workflow` has a `jobs()` method. Both take a callback receiving a builder (`s` for steps, `j` for jobs) with a short `add()` method. Context callbacks use `output` to access previous step/job outputs. All job-level configuration (permissions, needs, strategy, etc.) is passed through the constructor.
 
 ```typescript
 const checkout = getAction("actions/checkout@v5");
@@ -230,99 +196,29 @@ Job<{}>
   → .outputs(output => ({ ref: output.co.ref })) → Job<{ co: CheckoutOutputs }, { ref: string }>
 ```
 
-### Comparison
+### Constructor-Only Config
 
-| | Pattern A: addStep Callback | Pattern B: beginSteps/endSteps | Pattern C: steps()/jobs() Callback Builder |
-|---|---|---|---|
-| **API surface** | `addStep` with 4 overloads | `addStep` (4 overloads) + `beginSteps` + `endSteps` + `StepBuilder` class | `steps()` + `jobs()` + `StepBuilder.add`/`JobBuilder.add` with 4 overloads each |
-| **Backwards compatible** | Yes — existing `addStep(step)` unchanged | No — must wrap all steps in `beginSteps/endSteps` | No — `addStep` → `steps(s => s.add(...))`, `addJob` → `jobs(j => j.add(...))` |
-| **Boilerplate** | None | 2 extra method calls per job | 1 wrapping callback per level (steps, jobs) |
-| **Separation of concerns** | Job config and steps mixed in same chain | Job config before `beginSteps`, steps between begin/end | Job config outside `steps()`, steps inside callback |
-| **Type complexity** | 4 overloads on `Job` | 4 overloads on `StepBuilder`, plus `beginSteps`/`endSteps` return types | 4 overloads each on `StepBuilder`/`JobBuilder`, `steps()`/`jobs()` infer `Cx` from callback return |
-| **Runtime complexity** | `_ctx` tracking in `Job` | `_ctx` tracking in `StepBuilder`, transfer to `Job` on `endSteps` | `_ctx` tracking in builders, transfer on callback return |
-| **Workflow consistency** | Same chain: `addJob("id", (output) => Job)` | Needs similar `beginJobs/endJobs` or inconsistent with step pattern | Fully symmetric — `steps(s => ...)` and `jobs(j => ...)` are the same pattern |
-| **Existing workflow files** | No changes needed | Every `addStep` call must be wrapped | `addStep` → `steps()`, `addJob` → `jobs()` |
+Job-level settings are passed as the second argument to the `Job` constructor:
 
-### Pattern A — Advantages
-
-1. **No breaking changes**: `job.addStep(step)` still works exactly as before
-2. **Less code**: No begin/end wrapping needed
-3. **Consistent with Workflow**: `Workflow.addJob` uses the same callback pattern — no need for a separate `JobBuilder`
-4. **Simpler runtime**: One class tracks its own context
-
-### Pattern B — Advantages
-
-1. **Explicit scope**: Clear boundary where step context is available
-2. **Enforced ordering**: Job-level config (permissions, needs) stays outside the step block
-3. **Cleaner indentation**: Step block is visually distinct from job config
-
-### Pattern B — Disadvantages
-
-1. **Breaking change**: All existing code must add `beginSteps()`/`endSteps()`
-2. **Consistency problem**: If steps use `beginSteps/endSteps`, should jobs use `beginJobs/endJobs`? That doubles the boilerplate
-3. **Extra type**: `StepBuilder<Cx>` is a new exported type that users must understand
-4. **Forgetting `endSteps()`**: Type error if you forget `.endSteps()`, but the error message is confusing ("Property 'outputs' does not exist on type 'StepBuilder'")
-5. **No benefit for simple jobs**: Jobs without context access still need the wrapping
-
-### Pattern C — Advantages
-
-1. **Explicit scope**: Steps grouped inside `steps()`, jobs grouped inside `jobs()` — visually distinct from config
-2. **No forgetting `endSteps()`**: Unlike B, callbacks handle scoping automatically; no extra closing call to forget
-3. **Enforced ordering**: Job-level config (permissions, needs) stays outside `steps()`, preventing accidental mixing
-4. **Shorter method name**: `add()` instead of `addStep()`/`addJob()` reduces visual noise
-5. **Fully symmetric**: `steps(s => s.add(...))` and `jobs(j => j.add(...))` are the same pattern at both levels — no inconsistency between step and job APIs
-6. **Clear variable roles**: `s` = step builder, `j` = job builder, `output` = previous outputs — each name directly conveys its purpose
-
-### Pattern C — Disadvantages
-
-1. **Breaking change**: `addStep()` → `steps(s => s.add(...))`, `addJob()` → `jobs(j => j.add(...))`
-2. **Extra nesting**: One level of indentation deeper than A at both step and job levels
-3. **Internal types required**: `StepBuilder<Cx>` and `JobBuilder<Cx>` needed internally, though hidden behind callback type parameters
-4. **All jobs need wrapping**: Even simple jobs without context need `steps(s => s.add(...))`
-
-### Complex example comparison
-
-Pattern A:
 ```typescript
-new Workflow({ name: "CI", on: { push: {} } })
-  .addJob("build",
-    new Job("ubuntu-latest")
-      .addStep(checkout({ id: "co" }))
-      .addStep(setupNode({ with: { "node-version": "20" } }))
-      .addStep((output) => ({ name: "Log", run: "echo " + output.co.ref }))
-      .outputs((output) => ({ ref: output.co.ref }))
-  )
-  .addJob("deploy", (output) =>
-    new Job("ubuntu-latest")
-      .needs("build")
-      .addStep({ run: "echo " + output.build.ref })
-  )
-  .build("ci");
+new Job("ubuntu-latest", {
+    permissions: { contents: "read", packages: "write" },
+    needs: ["build", "test"],
+    strategy: { matrix: { os: ["ubuntu-latest", "macos-latest"] } },
+    if: "github.event_name == 'push'",
+    environment: "production",
+    concurrency: { group: "deploy", "cancel-in-progress": true },
+  })
+  .steps(s => s
+    .add(checkout({}))
+    .add({ run: "npm run deploy" })
+  );
 ```
 
-Pattern B:
-```typescript
-new Workflow({ name: "CI", on: { push: {} } })
-  .addJob("build",
-    new Job("ubuntu-latest")
-      .beginSteps()
-        .addStep(checkout({ id: "co" }))
-        .addStep(setupNode({ with: { "node-version": "20" } }))
-        .addStep((output) => ({ name: "Log", run: "echo " + output.co.ref }))
-      .endSteps()
-      .outputs((output) => ({ ref: output.co.ref }))
-  )
-  .addJob("deploy", (output) =>
-    new Job("ubuntu-latest")
-      .needs("build")
-      .beginSteps()
-        .addStep({ run: "echo " + output.build.ref })
-      .endSteps()
-  )
-  .build("ci");
-```
+This keeps configuration separate from step definitions — the constructor declares *what* the job is, `steps()` declares *what it does*.
 
-Pattern C:
+### Workflow Example
+
 ```typescript
 new Workflow({ name: "CI", on: { push: {} } })
   .jobs(j => j
@@ -336,8 +232,7 @@ new Workflow({ name: "CI", on: { push: {} } })
         .outputs(output => ({ ref: output.co.ref }))
     )
     .add("deploy", output =>
-      new Job("ubuntu-latest")
-        .needs("build")
+      new Job("ubuntu-latest", { needs: ["build"] })
         .steps(s => s
           .add({ run: "echo " + output.build.ref })
         )
@@ -346,15 +241,86 @@ new Workflow({ name: "CI", on: { push: {} } })
   .build("ci");
 ```
 
-### Callback Variable Naming Convention
+### Action Output Access
 
-All patterns (A, B, C) use these variable names in code examples:
+Composite actions use the same `steps()` pattern:
+
+```typescript
+new Action({
+    name: "Setup and Build",
+    description: "Checkout, setup Node, and build",
+    inputs: {
+      "node-version": { description: "Node.js version", default: "20" },
+    },
+    outputs: {
+      "build-hash": { description: "Hash of the build output" },
+    },
+  })
+  .steps(s => s
+    .add(checkout({ id: "co" }))
+    .add(setupNode({
+      id: "node",
+      with: { "node-version": "${{ inputs.node-version }}" },
+    }))
+    .add(output => ({
+      id: "build",
+      run: "echo ref=" + output.co.ref + "\nnpm run build",
+      shell: "bash",
+    }))
+  )
+  .outputMapping(output => ({
+    "build-hash": output.build.hash,
+  }))
+  .build("setup-and-build");
+```
+
+Using the action in a workflow via `ActionRef`:
+
+```typescript
+const setupBuild = ActionRef.from(action);
+
+new Workflow({ name: "CI", on: { push: {} } })
+  .jobs(j => j
+    .add("build",
+      new Job("ubuntu-latest")
+        .steps(s => s
+          .add(setupBuild({ id: "setup", with: { "node-version": "22" } }))
+          .add(output => ({
+            name: "Show hash",
+            run: "echo " + output.setup["build-hash"],
+          }))
+        )
+        .outputs(output => ({
+          hash: output.setup["build-hash"],
+        }))
+    )
+    .add("deploy", output =>
+      new Job("ubuntu-latest", { needs: ["build"] })
+        .steps(s => s
+          .add({ run: "echo hash=" + output.build.hash })
+        )
+    )
+  )
+  .build("ci");
+```
+
+### How `output` Flows
+
+| Scope | `output` contains | Example access |
+|-------|-------------------|----------------|
+| Step callback `s.add(output => ...)` | Previous step outputs (keyed by step `id`) | `output.co.ref` |
+| `outputs(output => ...)` on Job/Action | All step outputs in that job/action | `output.co.ref` |
+| Job callback `j.add("id", output => ...)` | Previous job outputs (keyed by job id) | `output.build.ref` |
+
+All runtime values are GitHub Actions expression strings like `"${{ steps.co.outputs.ref }}"` or `"${{ needs.build.outputs.ref }}"`.
+
+### Callback Variable Naming Convention
 
 | Variable | Role | Where it appears |
 |----------|------|------------------|
-| `output` | Previous outputs — step outputs in `addStep`/`add` callbacks, job outputs in `addJob`/`add` callbacks | `add(output => ...)`, `outputs(output => ...)`, `addJob("id", output => ...)` |
-| `s` | Step builder (Pattern C) | `steps(s => s.add(...))` |
-| `j` | Job builder (Pattern C) | `jobs(j => j.add(...))` |
+| `output` | Previous outputs — step outputs in `add` callbacks, job outputs in `add` callbacks | `add(output => ...)`, `outputs(output => ...)` |
+| `s` | Step builder | `steps(s => s.add(...))` |
+| `j` | Job builder | `jobs(j => j.add(...))` |
 
 Internal implementation uses `_ctx` for the runtime context storage field. The `Cx` generic type parameter tracks the accumulated output types at the type level.
 
@@ -379,40 +345,59 @@ export declare function getAction(ref: 'actions/checkout@v5'): {
 };
 ```
 
-### 3. `Job<Cx, O>` tracks step context
+### 3. `StepBuilder<Cx>` accumulates step context
 
 ```typescript
-export declare class Job<Cx = {}, O extends Record<string, string> = {}> {
-    addStep<Id extends string, StepO>(step: ActionStep<StepO, Id>): Job<Cx & Record<Id, StepO>, O>;
-    addStep(step: JobStep): Job<Cx, O>;
-    addStep<Id extends string, StepO>(stepFn: (output: Cx) => ActionStep<StepO, Id>): Job<Cx & Record<Id, StepO>, O>;
-    addStep(stepFn: (output: Cx) => JobStep): Job<Cx, O>;
-    outputs<T extends Record<string, string>>(outputs: T | ((output: Cx) => T)): Job<Cx, T>;
-    // ... other methods return this
+export declare class StepBuilder<Cx = {}> {
+    add<Id extends string, StepO>(step: ActionStep<StepO, Id>): StepBuilder<Cx & Record<Id, StepO>>;
+    add(step: JobStep): StepBuilder<Cx>;
+    add<Id extends string, StepO>(stepFn: (output: Cx) => ActionStep<StepO, Id>): StepBuilder<Cx & Record<Id, StepO>>;
+    add(stepFn: (output: Cx) => JobStep): StepBuilder<Cx>;
 }
 ```
 
-### 4. `Workflow<Cx>` tracks job context
+### 4. `Job<Cx, O>` with constructor-only config
 
-Same pattern as `Job`, but at the workflow level:
+```typescript
+export interface JobConfig {
+    permissions?: Permissions;
+    needs?: string[];
+    strategy?: Strategy;
+    if?: string;
+    environment?: string | Environment;
+    concurrency?: Concurrency;
+    "timeout-minutes"?: number;
+    env?: Record<string, string>;
+}
+
+export declare class Job<Cx = {}, O extends Record<string, string> = {}> {
+    constructor(runner: string, config?: JobConfig);
+    steps<NewCx>(callback: (s: StepBuilder<{}>) => StepBuilder<NewCx>): Job<NewCx, O>;
+    outputs<T extends Record<string, string>>(outputs: T | ((output: Cx) => T)): Job<Cx, T>;
+}
+```
+
+### 5. `JobBuilder<Cx>` accumulates job context
+
+```typescript
+export declare class JobBuilder<Cx = {}> {
+    add<Id extends string, O extends Record<string, string>>(
+        id: Id, job: Job<any, O>
+    ): JobBuilder<Cx & Record<Id, O>>;
+    add(id: string, job: Job | WorkflowCall): JobBuilder<Cx>;
+    add<Id extends string, O extends Record<string, string>>(
+        id: Id, jobFn: (output: Cx) => Job<any, O>
+    ): JobBuilder<Cx & Record<Id, O>>;
+    add(id: string, jobFn: (output: Cx) => Job | WorkflowCall): JobBuilder<Cx>;
+}
+```
+
+### 6. `Workflow<Cx>` with `jobs()` method
 
 ```typescript
 export declare class Workflow<Cx = {}> {
     constructor(config: WorkflowConfig);
-
-    // Job with typed outputs → expands context
-    addJob<Id extends string, O extends Record<string, string>>(
-        id: Id, job: Job<any, O>
-    ): Workflow<Cx & Record<Id, JobOutputs<O>>>;
-    // WorkflowCall or Job without specific outputs → preserves context
-    addJob(id: string, job: Job<any, any> | WorkflowCall): Workflow<Cx>;
-    // Callback returning Job with typed outputs → expands context
-    addJob<Id extends string, O extends Record<string, string>>(
-        id: Id, jobFn: (output: Cx) => Job<any, O>
-    ): Workflow<Cx & Record<Id, JobOutputs<O>>>;
-    // Callback returning any job → preserves context
-    addJob(id: string, jobFn: (output: Cx) => Job<any, any> | WorkflowCall): Workflow<Cx>;
-
+    jobs<NewCx>(callback: (j: JobBuilder<{}>) => JobBuilder<NewCx>): Workflow<NewCx>;
     static fromObject(def: WorkflowDefinition, id?: string): Workflow;
     toJSON(): WorkflowDefinition;
     build(id?: string): void;
@@ -422,19 +407,26 @@ export declare class Workflow<Cx = {}> {
 Usage:
 ```typescript
 new Workflow({ name: "CI", on: { push: {} } })
-  .addJob("build", buildJob)  // buildJob has .outputs({ ref: ... })
-  .addJob("deploy", (output) =>   // output.build.ref = "${{ needs.build.outputs.ref }}"
-    new Job("ubuntu-latest")
-      .needs("build")
-      .addStep({ run: "echo " + output.build.ref })
+  .jobs(j => j
+    .add("build", buildJob)  // buildJob has .outputs({ ref: ... })
+    .add("deploy", output =>   // output.build.ref = "${{ needs.build.outputs.ref }}"
+      new Job("ubuntu-latest", { needs: ["build"] })
+        .steps(s => s
+          .add({ run: "echo " + output.build.ref })
+        )
+    )
   )
 ```
 
-### 5. Runtime `_ctx` mechanism
+### 7. Runtime `_ctx` mechanism
 
-**Job/Action**: maintain `_ctx` for step outputs. On `addStep`, if step has `id` and `outputs`, collect into `_ctx[step.id]`. Callbacks receive `_ctx` as the `output` parameter. `outputs()` also accepts a callback.
+**StepBuilder**: maintains `_ctx` for step outputs. On `add()`, if step has `id` and `outputs`, collects into `_ctx[step.id]`. Callbacks receive `_ctx` as the `output` parameter. When `steps()` returns, `_ctx` is transferred to the `Job`.
 
-**Workflow**: maintain `_ctx` for job outputs. On `addJob(id, job)`, if `job._outputs` exists, create `_ctx[id]` with `${{ needs.id.outputs.key }}` expressions (same logic as current `jobOutputs` function). If argument is a function, call with `_ctx` first.
+**Job/Action**: `steps()` creates a `StepBuilder`, passes it to the callback, and receives the accumulated `_ctx` back. `outputs()` callback receives this `_ctx`.
+
+**JobBuilder**: maintains `_ctx` for job outputs. On `add(id, job)`, if `job._outputs` exists, creates `_ctx[id]` with `${{ needs.id.outputs.key }}` expressions. If argument is a function, calls with `_ctx` first.
+
+**Workflow**: `jobs()` creates a `JobBuilder`, passes it to the callback, and receives the accumulated `_ctx` back.
 
 `jobOutputs` function is kept as a compatibility helper.
 
@@ -630,10 +622,12 @@ export declare function getAction<T extends string>(ref: T): {
 ### Step 3: `src/generator/templates.rs` — CLASS_DECLARATIONS_TEMPLATE
 
 Full rewrite:
-- `Job<Cx, O>` with 4 addStep overloads + callback-aware `outputs` (callbacks use `output` parameter name)
+- `StepBuilder<Cx>` with 4 `add` overloads (callbacks use `output` parameter name)
+- `Job<Cx, O>` with constructor-only config (`JobConfig`), `steps()` method, callback-aware `outputs()`
+- `JobBuilder<Cx>` with 4 `add` overloads
+- `Workflow<Cx>` with `jobs()` method
 - Remove `CompositeJob`
-- `Workflow<Cx>` with 4 addJob overloads (context tracks job outputs as `JobOutputs<O>` expressions)
-- `Action<Cx>` (was `CompositeAction`) with 4 addStep overloads
+- `Action<Cx>` (was `CompositeAction`) with `steps()` method
 - `NodeAction` (was `JavaScriptAction`)
 - `WorkflowCall` (was `CallJob`)
 - `ActionRef` (was `CallAction`) — `from()` accepts `Action<any> | NodeAction | DockerAction`
@@ -641,13 +635,14 @@ Full rewrite:
 
 ### Step 4: `src/generator/templates.rs` — JOB_WORKFLOW_RUNTIME_TEMPLATE
 
-- `Job` constructor: add `this._ctx = {}`
-- `Job.addStep`: detect function arg → call with `_ctx` → collect outputs into `_ctx`
+- Add `StepBuilder` class: `add()` method with `_ctx` tracking, detects function arg → calls with `_ctx` → collects outputs
+- `Job` constructor: accept `(runner, config?)`, apply config fields (permissions, needs, strategy, etc.)
+- `Job.steps`: create `StepBuilder`, pass to callback, transfer `_ctx` back
 - `Job.outputs`: detect function arg → call with `_ctx`
-- `Workflow` constructor: add `this._ctx = {}`
-- `Workflow.addJob`: detect function arg → call with `_ctx` → if job has `_outputs`, populate `_ctx[id]` with `${{ needs.id.outputs.key }}` expressions
-- Remove `CompositeJob` class
-- Rename `CompositeAction` → `Action` + add `_ctx`/callback support to `addStep`
+- Add `JobBuilder` class: `add()` method with `_ctx` tracking for job outputs
+- `Workflow.jobs`: create `JobBuilder`, pass to callback, transfer `_ctx` back
+- Remove `CompositeJob` class, remove `addStep`/`addJob` methods
+- Rename `CompositeAction` → `Action` + add `steps()` with `StepBuilder`
 - Rename `JavaScriptAction` → `NodeAction`
 - Rename `CallJob` → `WorkflowCall`
 - Rename `CallAction` → `ActionRef`
@@ -675,9 +670,9 @@ Update comment on line 288.
 - `test_composite_job_inheritance`: `extends CompositeJob` → `extends Job`
 - `test_composite_action_migration_roundtrip`: `new CompositeAction(` → `new Action(`
 - `test_javascript_action_migration_roundtrip`: `new JavaScriptAction(` → `new NodeAction(`
-- Add `test_addstep_callback_context`: step callback receives previous step outputs via `output` parameter
+- Add `test_step_builder_callback_context`: `steps()` builder callback receives previous step outputs via `output` parameter
 - Add `test_outputs_callback_context`: `outputs()` callback receives previous step outputs via `output` parameter
-- Add `test_addjob_callback_context`: workflow `addJob` callback receives previous job outputs via `output` parameter (replaces `jobOutputs` pattern)
+- Add `test_job_builder_callback_context`: `jobs()` builder callback receives previous job outputs via `output` parameter (replaces `jobOutputs` pattern)
 
 ### Step 10: TypeScript Configuration
 
@@ -734,25 +729,26 @@ Add `defineConfig` declaration to `CLASS_DECLARATIONS_TEMPLATE`.
 - Update "Configuration hierarchy" line: `env vars > gaji.config.local.ts > gaji.config.ts > defaults`
 
 #### 9b. `src/init/templates.rs` — `EXAMPLE_WORKFLOW_TEMPLATE`
-- No class name changes needed (only uses `Job`, `Workflow`, `getAction`)
-- Optionally add a comment showing the callback pattern as an alternative
+- Update to use `steps(s => s.add(...))` and `jobs(j => j.add(...))` patterns
 
 #### 9c. `docs/reference/api.md` (English API Reference) — Major rewrite
-- Update `Workflow` section: `addJob` now accepts `Job<any, any> | WorkflowCall`, add `Cx` generic, add 4 addJob overloads, add callback examples
-- Update `Job` section: add `Cx` generic, 4 addStep overloads, callback `outputs`, add context examples
+- Add `StepBuilder` section with 4 `add` overloads
+- Update `Job` section: `Cx` generic, constructor-only `JobConfig`, `steps()` method, callback `outputs`
+- Add `JobBuilder` section with 4 `add` overloads
+- Update `Workflow` section: `Cx` generic, `jobs()` method
 - Remove `CompositeJob` section entirely
-- Rename `CompositeAction` → `Action` section with `Cx` generic and 4 addStep overloads
+- Rename `CompositeAction` → `Action` section with `steps()` method
 - Rename `JavaScriptAction` → `NodeAction` section
 - Rename `CallJob` → `WorkflowCall` section
 - Rename `CallAction` → `ActionRef` section, update `from()` signature
-- Update `jobOutputs()` section: note it's a compatibility helper, show `addJob` callback as primary pattern
+- Update `jobOutputs()` section: note it's a compatibility helper, show `jobs()` callback as primary pattern
 - Add examples for each changed class showing callback/context usage
 
 #### 9d. `docs/guide/writing-workflows.md` (English Guide) — Section rewrites
-- Update "Steps" section: show both direct and callback `addStep` patterns
+- Update "Steps" section: show `steps(s => s.add(...))` pattern with direct and callback forms
 - Replace `CompositeJob` section: show extending `Job` directly (CompositeJob removed)
 - Update `CallJob` → `WorkflowCall` in reusable workflow section
-- Rewrite "Outputs" section: show `outputs((output) => ...)` and `addJob("id", (output) => ...)` as primary patterns, `jobOutputs()` as compatibility helper
+- Rewrite "Outputs" section: show `outputs(output => ...)` and `jobs(j => j.add("id", output => ...))` as primary patterns, `jobOutputs()` as compatibility helper
 
 #### 9e. `docs/examples/composite-action.md` (English Examples)
 - Rename `CompositeAction` → `Action` in all code examples
@@ -793,7 +789,7 @@ Add `defineConfig` declaration to `CLASS_DECLARATIONS_TEMPLATE`.
 
 Below are concrete before/after examples for each major documentation change.
 
-#### API Reference: `addStep` section (docs/reference/api.md)
+#### API Reference: `steps()` / `add()` section (docs/reference/api.md)
 
 Before:
 ```typescript
@@ -803,13 +799,14 @@ addStep(step: JobStep): this
 
 After:
 ```typescript
-// Direct step — no context change
-addStep(step: JobStep): Job<Cx, O>
-// Action step with id — expands context with step outputs
-addStep<Id extends string, StepO>(step: ActionStep<StepO, Id>): Job<Cx & Record<Id, StepO>, O>
-// Callback — access previous step outputs via output
-addStep(stepFn: (output: Cx) => JobStep): Job<Cx, O>
-addStep<Id extends string, StepO>(stepFn: (output: Cx) => ActionStep<StepO, Id>): Job<Cx & Record<Id, StepO>, O>
+// Job.steps — pass steps through callback builder
+steps<NewCx>(callback: (s: StepBuilder<{}>) => StepBuilder<NewCx>): Job<NewCx, O>
+
+// StepBuilder.add — 4 overloads
+add<Id extends string, StepO>(step: ActionStep<StepO, Id>): StepBuilder<Cx & Record<Id, StepO>>
+add(step: JobStep): StepBuilder<Cx>
+add<Id extends string, StepO>(stepFn: (output: Cx) => ActionStep<StepO, Id>): StepBuilder<Cx & Record<Id, StepO>>
+add(stepFn: (output: Cx) => JobStep): StepBuilder<Cx>
 ```
 
 Example:
@@ -817,12 +814,14 @@ Example:
 const checkout = getAction("actions/checkout@v5");
 
 new Job("ubuntu-latest")
-  .addStep(checkout({ id: "co" }))
-  .addStep((output) => ({
-    name: "Use ref",
-    run: "echo " + output.co.ref,   // "${{ steps.co.outputs.ref }}"
-  }))
-  .outputs((output) => ({
+  .steps(s => s
+    .add(checkout({ id: "co" }))
+    .add(output => ({
+      name: "Use ref",
+      run: "echo " + output.co.ref,   // "${{ steps.co.outputs.ref }}"
+    }))
+  )
+  .outputs(output => ({
     ref: output.co.ref,              // "${{ steps.co.outputs.ref }}"
   }));
 ```
@@ -850,15 +849,20 @@ After:
 const checkout = getAction("actions/checkout@v5");
 
 new Workflow({ name: "CI", on: { push: {} } })
-  .addJob("build",
-    new Job("ubuntu-latest")
-      .addStep(checkout({ id: "co" }))
-      .outputs((output) => ({ ref: output.co.ref }))
-  )
-  .addJob("deploy", (output) =>
-    new Job("ubuntu-latest")
-      .needs("build")
-      .addStep({ run: "echo " + output.build.ref })
+  .jobs(j => j
+    .add("build",
+      new Job("ubuntu-latest")
+        .steps(s => s
+          .add(checkout({ id: "co" }))
+        )
+        .outputs(output => ({ ref: output.co.ref }))
+    )
+    .add("deploy", output =>
+      new Job("ubuntu-latest", { needs: ["build"] })
+        .steps(s => s
+          .add({ run: "echo " + output.build.ref })
+        )
+    )
   )
   .build("ci");
 ```
@@ -892,17 +896,16 @@ import { Action, getAction } from "../generated/index.js";
 const checkout = getAction("actions/checkout@v5");
 const setupNode = getAction("actions/setup-node@v4");
 
-const action = new Action({
+new Action({
   name: "Setup",
   description: "Setup Node.js project",
-});
-
-action
-  .addStep(checkout({}))
-  .addStep(setupNode({ with: { "node-version": "20" } }))
-  .addStep({ run: "npm ci", shell: "bash" });
-
-action.build("setup");
+})
+  .steps(s => s
+    .add(checkout({}))
+    .add(setupNode({ with: { "node-version": "20" } }))
+    .add({ run: "npm ci", shell: "bash" })
+  )
+  .build("setup");
 ```
 
 #### Job inheritance section (docs/examples/composite-action.md)
@@ -935,13 +938,18 @@ const checkout = getAction("actions/checkout@v5");
 class DeployJob extends Job {
   constructor(env: string) {
     super("ubuntu-latest");
-    this.addStep(checkout({})).addStep({ run: "deploy " + env });
+    this.steps(s => s
+      .add(checkout({}))
+      .add({ run: "deploy " + env })
+    );
   }
 }
 
 new Workflow({ name: "Deploy", on: { push: { branches: ["main"] } } })
-  .addJob("staging", new DeployJob("staging"))
-  .addJob("production", new DeployJob("production"))
+  .jobs(j => j
+    .add("staging", new DeployJob("staging"))
+    .add("production", new DeployJob("production"))
+  )
   .build("deploy");
 ```
 
@@ -1001,7 +1009,9 @@ const tests = new WorkflowCall("org/repo/.github/workflows/test.yml@main", {
 });
 
 new Workflow({ name: "CI", on: { push: {} } })
-  .addJob("tests", tests)
+  .jobs(j => j
+    .add("tests", tests)
+  )
   .build("ci");
 ```
 
@@ -1077,22 +1087,21 @@ const action = new Action({ name: "...", description: "..." });
 
 ## Files NOT Modified
 
-- `workflows/*.ts` — only import `Job`, `Workflow`, `getAction` (unchanged)
-- `src/init/templates.rs` — only uses `Job`, `Workflow`, `getAction`
 - `src/builder.rs`, `src/main.rs`, `src/cli.rs`, etc.
 
 ## Key Design Decisions
 
-1. **`addStep` returns `Job<NewCx, O>` not `this`**: Subclass typing is lost, but acceptable since `CompositeJob` is removed.
+1. **`steps()` returns `Job<NewCx, O>` not `this`**: Subclass typing is lost, but acceptable since `CompositeJob` is removed. Inheritance still works — `this.steps()` in a constructor mutates internal state.
 2. **Overload ordering**: ActionStep overloads before JobStep overloads so TypeScript picks the more specific one.
 3. **`_ctx` not serialized**: `toJSON()` explicitly builds output from named fields; `_ctx` never leaks.
 4. **Existing `getAction` output population unchanged**: `GET_ACTION_RUNTIME_TEMPLATE` already populates `step.outputs` with expression strings when `id` is present. The `_ctx` mechanism just collects these.
 5. **`typeof stepOrFn === 'function'`**: Works in QuickJS for both arrow and regular functions. Action step objects are never functions, so no false positives.
-6. **`Workflow.addJob` returns `Workflow<NewCx>`**: Same pattern as `Job.addStep`. When a job has typed outputs, context expands. When no outputs (`O = {}`), context gets `Record<Id, {}>` — accessing any property on `output.jobId` is a type error since `{}` has no properties. This is correct behavior.
-7. **Workflow `_ctx` collects job outputs**: The runtime `addJob` checks `job._outputs` (same field `jobOutputs` reads). If present, creates expression map `{ key: "${{ needs.id.outputs.key }}" }` in `_ctx[id]`. This is identical to what `jobOutputs()` does, just integrated into the builder.
-8. **`defineConfig` is an identity function**: At runtime it just returns its argument. It exists solely for TypeScript type checking and autocomplete.
-9. **TS config uses same execution pipeline**: Config files go through the same oxc strip + QuickJS execute path as workflow files. No new runtime dependency needed.
-10. **Backward compatibility**: If `gaji.config.ts` is not found, gaji falls back to `.gaji.toml` for existing projects that haven't migrated.
+6. **`JobBuilder.add` expands `Workflow<Cx>`**: When a job has typed outputs, context expands. When no outputs (`O = {}`), context gets `Record<Id, {}>` — accessing any property on `output.jobId` is a type error since `{}` has no properties. This is correct behavior.
+7. **`JobBuilder._ctx` collects job outputs**: The runtime `add` checks `job._outputs` (same field `jobOutputs` reads). If present, creates expression map `{ key: "${{ needs.id.outputs.key }}" }` in `_ctx[id]`. This is identical to what `jobOutputs()` does, just integrated into the builder.
+8. **Constructor-only config**: Job-level settings (permissions, needs, strategy, etc.) are passed through the `Job` constructor only. No builder methods for config — this keeps configuration separate from step definitions and avoids the multiple-call ambiguity problem.
+9. **`defineConfig` is an identity function**: At runtime it just returns its argument. It exists solely for TypeScript type checking and autocomplete.
+10. **TS config uses same execution pipeline**: Config files go through the same oxc strip + QuickJS execute path as workflow files. No new runtime dependency needed.
+11. **Backward compatibility**: If `gaji.config.ts` is not found, gaji falls back to `.gaji.toml` for existing projects that haven't migrated.
 
 ## Verification
 
@@ -1103,6 +1112,6 @@ cargo fmt --all --check
 ```
 
 The 3 new integration tests validate the core callback/context behavior end-to-end through QuickJS execution:
-- `test_addstep_callback_context`: step-level context (`output` has previous step outputs)
+- `test_step_builder_callback_context`: step-level context (`output` has previous step outputs)
 - `test_outputs_callback_context`: `outputs()` callback with step context via `output`
-- `test_addjob_callback_context`: workflow-level context (`output` has previous job outputs, replacing `jobOutputs` pattern)
+- `test_job_builder_callback_context`: workflow-level context (`output` has previous job outputs, replacing `jobOutputs` pattern)
