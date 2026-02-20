@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.0](https://github.com/dodok8/gaji/compare/v0.5.1...v0.6.0) - 2026-02-20
+
+### Added
+
+- add `list` subcommand to show used GitHub Actions ([#58](https://github.com/dodok8/gaji/pull/58))
+
+### Other
+
+- Update ROADMAP
+- replace ROADMAP with gaji 1.0 plan ([#57](https://github.com/dodok8/gaji/pull/57))
+
 ## [0.5.1](https://github.com/dodok8/gaji/compare/v0.5.0...v0.5.1) - 2026-02-19
 
 ### Added
