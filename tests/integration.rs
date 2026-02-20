@@ -46,16 +46,19 @@ fn test_executor_to_yaml_pipeline() {
 
     let workflow_js = r#"
 var checkout = getAction("actions/checkout@v5");
-var build = new Job("ubuntu-latest")
-    .addStep(checkout({ name: "Checkout" }))
-    .addStep({ name: "Test", run: "npm test" });
 
-var wf = new Workflow({
+new Workflow({
     name: "Integration Test",
     on: { push: { branches: ["main"] } },
-}).addJob("build", build);
-
-wf.build("integration-test");
+}).jobs(function(j) { return j
+    .add("build",
+        new Job("ubuntu-latest")
+            .steps(function(s) { return s
+                .add(checkout({ name: "Checkout" }))
+                .add({ name: "Test", run: "npm test" })
+            })
+    )
+}).build("integration-test");
 "#;
 
     // Strip export/import for QuickJS script mode
@@ -97,14 +100,17 @@ fn test_multiple_workflow_builds() {
     let runtime_stripped = strip_module_syntax(&runtime_js);
 
     let workflow_js = r#"
-var job1 = new Job("ubuntu-latest").addStep({ name: "Step1", run: "echo 1" });
-var job2 = new Job("ubuntu-latest").addStep({ name: "Step2", run: "echo 2" });
+new Workflow({ name: "WF1", on: { push: {} } })
+    .jobs(function(j) { return j
+        .add("job1", new Job("ubuntu-latest").steps(function(s) { return s.add({ name: "Step1", run: "echo 1" }) }))
+    })
+    .build("workflow-1");
 
-var wf1 = new Workflow({ name: "WF1", on: { push: {} } }).addJob("job1", job1);
-var wf2 = new Workflow({ name: "WF2", on: { pull_request: {} } }).addJob("job2", job2);
-
-wf1.build("workflow-1");
-wf2.build("workflow-2");
+new Workflow({ name: "WF2", on: { pull_request: {} } })
+    .jobs(function(j) { return j
+        .add("job2", new Job("ubuntu-latest").steps(function(s) { return s.add({ name: "Step2", run: "echo 2" }) }))
+    })
+    .build("workflow-2");
 "#;
 
     let bundled = format!("{}\n\n{}", runtime_stripped, workflow_js);
@@ -146,22 +152,24 @@ fn test_composite_job_inheritance() {
 var checkout = getAction("actions/checkout@v5");
 
 class DeployJob extends Job {
-    constructor(environment) {
-        super("ubuntu-latest");
-        this.env({ ENVIRONMENT: environment })
-            .addStep(checkout({ name: "Checkout" }))
-            .addStep({ name: "Deploy", run: "npm run deploy:" + environment });
+    constructor(environment, config) {
+        if (config === undefined) config = {};
+        config.env = { ENVIRONMENT: environment };
+        super("ubuntu-latest", config);
+        this.steps(function(s) { return s
+            .add(checkout({ name: "Checkout" }))
+            .add({ name: "Deploy", run: "npm run deploy:" + environment })
+        });
     }
 }
 
-var wf = new Workflow({
+new Workflow({
     name: "Deploy",
     on: { push: { tags: ["v*"] } },
-})
-    .addJob("deploy-staging", new DeployJob("staging"))
-    .addJob("deploy-production", new DeployJob("production").needs(["deploy-staging"]));
-
-wf.build("deploy");
+}).jobs(function(j) { return j
+    .add("deploy-staging", new DeployJob("staging"))
+    .add("deploy-production", new DeployJob("production", { needs: ["deploy-staging"] }))
+}).build("deploy");
 "#;
 
     let bundled = format!("{}\n\n{}", runtime_stripped, workflow_js);
@@ -218,7 +226,7 @@ fn test_composite_action_migration_roundtrip() {
     let action_js = r#"
 var checkout = getAction("actions/checkout@v5");
 
-var action = new CompositeAction({
+new Action({
     name: "Setup Environment",
     description: "Sets up the build environment",
     inputs: {
@@ -228,14 +236,13 @@ var action = new CompositeAction({
             default: "20",
         },
     },
-});
-
-action
-    .addStep(checkout({ name: "Checkout" }))
-    .addStep({ name: "Install deps", run: "npm ci", shell: "bash" })
-    .addStep({ name: "Lint", run: "npm run lint", shell: "bash" });
-
-action.build("setup-env");
+})
+    .steps(function(s) { return s
+        .add(checkout({ name: "Checkout" }))
+        .add({ name: "Install deps", run: "npm ci", shell: "bash" })
+        .add({ name: "Lint", run: "npm run lint", shell: "bash" })
+    })
+    .build("setup-env");
 "#;
 
     let bundled = format!("{}\n\n{}", runtime_stripped, action_js);
@@ -273,7 +280,7 @@ fn test_javascript_action_migration_roundtrip() {
 
     // Simulate migrated NodeAction TypeScript
     let action_js = r#"
-var action = new JavaScriptAction(
+var action = new NodeAction(
     {
         name: "My Node Action",
         description: "A test Node.js action",
@@ -391,18 +398,19 @@ fn test_action_step_outputs_with_id() {
 
     let workflow_js = r#"
 var checkout = getAction("actions/checkout@v5");
-var step = checkout({ id: "my-checkout" });
 
-var build = new Job("ubuntu-latest")
-    .addStep(step)
-    .addStep({ name: "Use output", run: "echo " + step.outputs.ref });
-
-var wf = new Workflow({
+new Workflow({
     name: "Output Test",
     on: { push: {} },
-}).addJob("build", build);
-
-wf.build("output-test");
+}).jobs(function(j) { return j
+    .add("build",
+        new Job("ubuntu-latest")
+            .steps(function(s) { return s
+                .add(checkout({ id: "my-checkout" }))
+                .add(function(output) { return { name: "Use output", run: "echo " + output["my-checkout"].ref } })
+            })
+    )
+}).build("output-test");
 "#;
 
     let bundled = format!("{}\n\n{}", runtime_stripped, workflow_js);
@@ -448,19 +456,20 @@ fn test_action_step_outputs_without_id() {
     let workflow_js = r#"
 var checkout = getAction("actions/checkout@v5");
 var step = checkout({});
-
 var hasRef = step.outputs.ref !== undefined;
 
-var build = new Job("ubuntu-latest")
-    .addStep(step)
-    .addStep({ name: "Check", run: "hasRef=" + hasRef });
-
-var wf = new Workflow({
+new Workflow({
     name: "No ID Test",
     on: { push: {} },
-}).addJob("build", build);
-
-wf.build("no-id-test");
+}).jobs(function(j) { return j
+    .add("build",
+        new Job("ubuntu-latest")
+            .steps(function(s) { return s
+                .add(step)
+                .add({ name: "Check", run: "hasRef=" + hasRef })
+            })
+    )
+}).build("no-id-test");
 "#;
 
     let bundled = format!("{}\n\n{}", runtime_stripped, workflow_js);
@@ -502,26 +511,25 @@ fn test_job_outputs_passing() {
 
     let workflow_js = r#"
 var checkout = getAction("actions/checkout@v5");
-var step = checkout({ id: "my-checkout" });
 
-var build = new Job("ubuntu-latest")
-    .addStep(step)
-    .outputs({ ref: step.outputs.ref, sha: step.outputs.commit });
-
-var buildOutputs = jobOutputs("build", build);
-
-var deploy = new Job("ubuntu-latest")
-    .needs("build")
-    .addStep({ name: "Use output", run: "echo " + buildOutputs.ref + " " + buildOutputs.sha });
-
-var wf = new Workflow({
+new Workflow({
     name: "Job Outputs Test",
     on: { push: {} },
-})
-    .addJob("build", build)
-    .addJob("deploy", deploy);
-
-wf.build("job-outputs-test");
+}).jobs(function(j) { return j
+    .add("build",
+        new Job("ubuntu-latest")
+            .steps(function(s) { return s
+                .add(checkout({ id: "my-checkout" }))
+            })
+            .outputs(function(output) { return { ref: output["my-checkout"].ref, sha: output["my-checkout"].commit } })
+    )
+    .add("deploy", function(output) {
+        return new Job("ubuntu-latest", { needs: ["build"] })
+            .steps(function(s) { return s
+                .add({ name: "Use output", run: "echo " + output.build.ref + " " + output.build.sha })
+            })
+    })
+}).build("job-outputs-test");
 "#;
 
     let bundled = format!("{}\n\n{}", runtime_stripped, workflow_js);
@@ -546,7 +554,7 @@ wf.build("job-outputs-test");
     );
 
     // Verify deploy job has needs
-    assert_eq!(json["jobs"]["deploy"]["needs"], "build");
+    assert_eq!(json["jobs"]["deploy"]["needs"][0], "build");
 
     // Verify YAML output is clean
     let yaml_str = serde_yaml::to_string(&json).unwrap();
@@ -571,31 +579,31 @@ fn test_job_outputs_passing_manual_values() {
     let runtime_stripped = strip_module_syntax(&runtime_js);
 
     let workflow_js = r#"
-var setup = new Job("ubuntu-latest")
-    .addStep({ id: "version", run: 'echo "value=1.2.3" >> "$GITHUB_OUTPUT"' })
-    .addStep({ id: "hash", run: 'echo "value=$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"' })
-    .outputs({
-        version: "${{ steps.version.outputs.value }}",
-        commit_hash: "${{ steps.hash.outputs.value }}",
-    });
-
-var setupOutputs = jobOutputs("setup", setup);
-
-var publish = new Job("ubuntu-latest")
-    .needs("setup")
-    .addStep({
-        name: "Publish",
-        run: "publish --version " + setupOutputs.version + " --hash " + setupOutputs.commit_hash,
-    });
-
-var wf = new Workflow({
+new Workflow({
     name: "Manual Outputs Test",
     on: { push: { tags: ["v*"] } },
-})
-    .addJob("setup", setup)
-    .addJob("publish", publish);
-
-wf.build("manual-outputs-test");
+}).jobs(function(j) { return j
+    .add("setup",
+        new Job("ubuntu-latest")
+            .steps(function(s) { return s
+                .add({ id: "version", run: 'echo "value=1.2.3" >> "$GITHUB_OUTPUT"' })
+                .add({ id: "hash", run: 'echo "value=$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"' })
+            })
+            .outputs({
+                version: "${{ steps.version.outputs.value }}",
+                commit_hash: "${{ steps.hash.outputs.value }}",
+            })
+    )
+    .add("publish", function(output) {
+        return new Job("ubuntu-latest", { needs: ["setup"] })
+            .steps(function(s) { return s
+                .add({
+                    name: "Publish",
+                    run: "publish --version " + output.setup.version + " --hash " + output.setup.commit_hash,
+                })
+            })
+    })
+}).build("manual-outputs-test");
 "#;
 
     let bundled = format!("{}\n\n{}", runtime_stripped, workflow_js);
