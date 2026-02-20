@@ -129,7 +129,7 @@ wf2.build("workflow-2");
     }
 }
 
-/// Test CompositeJob: class inheritance to create reusable job templates.
+/// Test Job inheritance: class inheritance to create reusable job templates.
 #[test]
 fn test_composite_job_inheritance() {
     use gaji::executor;
@@ -141,11 +141,11 @@ fn test_composite_job_inheritance() {
 
     let runtime_stripped = strip_module_syntax(&runtime_js);
 
-    // Simulate TypeScript compiled output: class DeployJob extends CompositeJob
+    // Simulate TypeScript compiled output: class DeployJob extends Job
     let workflow_js = r#"
 var checkout = getAction("actions/checkout@v5");
 
-class DeployJob extends CompositeJob {
+class DeployJob extends Job {
     constructor(environment) {
         super("ubuntu-latest");
         this.env({ ENVIRONMENT: environment })
@@ -193,7 +193,7 @@ wf.build("deploy");
     assert!(yaml_str.contains("deploy-production"));
 }
 
-/// Test CompositeAction migration roundtrip: TypeScript -> QuickJS -> JSON -> YAML.
+/// Test Action (composite) migration roundtrip: TypeScript -> QuickJS -> JSON -> YAML.
 #[test]
 fn test_composite_action_migration_roundtrip() {
     use gaji::executor;
@@ -214,7 +214,7 @@ fn test_composite_action_migration_roundtrip() {
 
     let runtime_stripped = strip_module_syntax(&runtime_js);
 
-    // Simulate migrated CompositeAction TypeScript (what generate_composite_action_ts would produce)
+    // Simulate migrated Action TypeScript (what generate_composite_action_ts would produce)
     let action_js = r#"
 var checkout = getAction("actions/checkout@v5");
 
@@ -259,7 +259,7 @@ action.build("setup-env");
     assert!(yaml_str.contains("shell: bash"));
 }
 
-/// Test JavaScriptAction migration roundtrip: TypeScript -> QuickJS -> JSON -> YAML.
+/// Test NodeAction migration roundtrip: TypeScript -> QuickJS -> JSON -> YAML.
 #[test]
 fn test_javascript_action_migration_roundtrip() {
     use gaji::executor;
@@ -271,7 +271,7 @@ fn test_javascript_action_migration_roundtrip() {
 
     let runtime_stripped = strip_module_syntax(&runtime_js);
 
-    // Simulate migrated JavaScriptAction TypeScript
+    // Simulate migrated NodeAction TypeScript
     let action_js = r#"
 var action = new JavaScriptAction(
     {
