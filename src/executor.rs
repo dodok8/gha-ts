@@ -248,16 +248,18 @@ import { getAction, Job, Workflow } from "../../generated/index.js";
 
 const checkout = getAction("actions/checkout@v5");
 
-const build = new Job("ubuntu-latest")
-    .addStep(checkout({ name: "Checkout", with: { "fetch-depth": 1 } }))
-    .addStep({ name: "Test", run: "npm test" });
-
-const wf = new Workflow({
+new Workflow({
     name: "CI",
     on: { push: { branches: ["main"] } },
-}).addJob("build", build);
-
-wf.build("ci");
+}).jobs(j => j
+    .add("build",
+        new Job("ubuntu-latest")
+            .steps(s => s
+                .add(checkout({ name: "Checkout", with: { "fetch-depth": 1 } }))
+                .add({ name: "Test", run: "npm test" })
+            )
+    )
+).build("ci");
 "#;
 
         // Bundle like execute_workflow does
@@ -283,7 +285,7 @@ wf.build("ci");
         assert_eq!(steps[1]["run"], "npm test");
     }
 
-    /// Test Action (composite) through QuickJS
+    /// Test Action (formerly CompositeAction) through QuickJS
     #[test]
     fn test_composite_action_pipeline() {
         use crate::generator::templates::JOB_WORKFLOW_RUNTIME_TEMPLATE;
@@ -294,12 +296,14 @@ wf.build("ci");
         );
 
         let workflow_js = r#"
-var action = new CompositeAction({
+new Action({
     name: "My Action",
     description: "A composite action",
-});
-action.addStep({ name: "Step 1", run: "echo hello", shell: "bash" });
-action.build("my-action");
+})
+    .steps(s => s
+        .add({ name: "Step 1", run: "echo hello", shell: "bash" })
+    )
+    .build("my-action");
 "#;
 
         let runtime_stripped = remove_imports(&runtime_js);
@@ -330,13 +334,17 @@ action.build("my-action");
         let ts_source = r#"
 import { Job, Workflow } from "../../generated/index.js";
 
-const job: Job = new Job("ubuntu-latest")
-    .addStep({ name: "Hello", run: "echo hi" });
-
 const wf: Workflow = new Workflow({
     name: "Typed",
     on: { push: {} },
-}).addJob("job1", job);
+}).jobs(j => j
+    .add("job1",
+        new Job("ubuntu-latest")
+            .steps(s => s
+                .add({ name: "Hello", run: "echo hi" })
+            )
+    )
+);
 
 wf.build("typed-wf");
 "#;

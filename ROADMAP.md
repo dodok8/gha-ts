@@ -633,20 +633,19 @@ No dependencies. Each group touches different files.
 - ~~`generate_javascript_action_ts()`: `JavaScriptAction` → `NodeAction` in imports and `new` call~~
 - ~~Update 6 test assertions for new class names~~
 
-#### 1B. `src/executor.rs` — Test rename (부분 완료)
+#### ~~1B. `src/executor.rs` — Test rename~~ ✅
 
-- ~~doc comment 업데이트: `Test CompositeAction` → `Test Action (composite)`~~
-- Update test `test_composite_action_pipeline` (~line 286): `new CompositeAction(` → `new Action(`
-  - **미완료 사유**: 테스트 JS 코드가 QuickJS 런타임에서 실행되는데, `JOB_WORKFLOW_RUNTIME_TEMPLATE`(Phase 2-4)에 아직 `CompositeAction` 클래스로 정의되어 있어 `new Action(...)`으로 바꾸면 `ReferenceError` 발생. Phase 2-4 완료 후 변경 필요.
+- ~~doc comment 업데이트: `Test CompositeAction` → `Test Action (formerly CompositeAction)`~~
+- ~~`test_composite_action_pipeline`: `new CompositeAction(` → `new Action(`, `addStep` → `steps(s => s.add(...))`~~
+- ~~`test_job_workflow_pipeline`: `addStep`/`addJob` → `steps()`/`jobs()` builder pattern~~
+- ~~`test_strip_then_execute`: `addStep`/`addJob` → `steps()`/`jobs()` builder pattern~~
 
-#### 1C. `tests/integration.rs` — Existing test renames only (부분 완료)
+#### ~~1C. `tests/integration.rs` — Existing test renames only~~ ✅
 
-- ~~`test_composite_job_inheritance`: `extends CompositeJob` → `extends Job`~~
-- ~~doc comment 4건 업데이트~~
-- `test_composite_action_migration_roundtrip`: `new CompositeAction(` → `new Action(`
-  - **미완료 사유**: 1B와 동일. 런타임 템플릿에 `Action` 클래스가 아직 없음.
-- `test_javascript_action_migration_roundtrip`: `new JavaScriptAction(` → `new NodeAction(`
-  - **미완료 사유**: 1B와 동일. 런타임 템플릿에 `NodeAction` 클래스가 아직 없음.
+- ~~`test_composite_job_inheritance`: `extends CompositeJob` → `extends Job`, constructor-only config~~
+- ~~`test_composite_action_migration_roundtrip`: `new CompositeAction(` → `new Action(`, `addStep` → `steps()`~~
+- ~~`test_javascript_action_migration_roundtrip`: `new JavaScriptAction(` → `new NodeAction(`~~
+- ~~All tests updated to use `steps()`/`jobs()` builder pattern~~
 
 #### ~~1D. English doc renames~~ ✅
 
@@ -663,92 +662,48 @@ Each file is independent:
 - ~~`docs/ko/reference/api.md`, `docs/ko/guide/writing-workflows.md`, `docs/ko/examples/composite-action.md`, `docs/ko/examples/javascript-action.md`, `docs/ko/guide/migration.md`, `docs/ko/reference/actions.md` — mirror 1D changes~~
 - ~~`README.md`: `CompositeAction` → `Action`, `CallAction` → `ActionRef`, `CallJob` → `WorkflowCall`~~
 
-### Phase 2 — Core Templates (sequential, single file) ⬜ 미착수
+### ~~Phase 2 — Core Templates (sequential, single file)~~ ✅
 
-All in `src/generator/templates.rs`. Must be done in order since they're in the same file. Can run in parallel with Phase 1.
-Phase 1의 1B/1C에서 미완료된 런타임 클래스 리네임(`CompositeAction→Action`, `JavaScriptAction→NodeAction`)이 이 Phase에서 해결됨.
+~~All in `src/generator/templates.rs`. Must be done in order since they're in the same file.~~
 
-#### 2-1. `BASE_TYPES_TEMPLATE` — ActionStep Id generic + interface renames (easy)
+#### ~~2-1. `BASE_TYPES_TEMPLATE` — ActionStep Id generic + interface renames~~ ✅
 
-Add `Id` generic to `ActionStep`:
+- ~~`ActionStep<O, Id>` with `readonly id: Id`~~
+- ~~`JavaScriptActionConfig` → `NodeActionConfig`, `JavaScriptActionRuns` → `NodeActionRuns`~~
 
-```typescript
-export interface ActionStep<O = {}, Id extends string = string> extends JobStep {
-    readonly outputs: O;
-    readonly id: Id;
-}
-```
+#### ~~2-2. `GET_ACTION_FALLBACK_DECL_TEMPLATE` — Id generic~~ ✅
 
-Rename config/runs interfaces:
-- `JavaScriptActionConfig` → `NodeActionConfig`
-- `JavaScriptActionRuns` → `NodeActionRuns`
+- ~~`<Id extends string>` on id-required overload returning `ActionStep<Record<string, string>, Id>`~~
 
-#### 2-2. `GET_ACTION_FALLBACK_DECL_TEMPLATE` — Id generic (easy)
+#### ~~2-3. `CLASS_DECLARATIONS_TEMPLATE` — Full rewrite~~ ✅
 
-Add `<Id extends string>` to the id-required overload:
+- ~~`StepBuilder<Cx>`, `JobBuilder<Cx>`, `Job<Cx, O>` with constructor-only `JobConfig`, `Workflow<Cx>` with `jobs()`~~
+- ~~`Action<Cx>`, `NodeAction`, `WorkflowCall`, `ActionRef`, `defineConfig`~~
+- ~~`CompositeJob` removed~~
 
-```typescript
-export declare function getAction<T extends string>(ref: T): {
-    <Id extends string>(config: { id: Id; ... }): ActionStep<Record<string, string>, Id>;
-    (config?: { ... }): JobStep;
-};
-```
+#### ~~2-4. `JOB_WORKFLOW_RUNTIME_TEMPLATE` — Runtime logic~~ ✅
 
-#### 2-3. `CLASS_DECLARATIONS_TEMPLATE` — Full rewrite (moderate) ★
+- ~~`StepBuilder`/`JobBuilder` classes with `_ctx` tracking~~
+- ~~`Job.steps()`/`Job.outputs()` with callback support, constructor-only config~~
+- ~~`Workflow.jobs()` with callback support~~
+- ~~All class renames (`Action`, `NodeAction`, `WorkflowCall`, `ActionRef`), `CompositeJob` removed~~
 
-- `StepBuilder<Cx>` with 4 `add` overloads (callbacks use `output` parameter name)
-- `Job<Cx, O>` with constructor-only config (`JobConfig`), `steps()` method, callback-aware `outputs()`
-- `JobBuilder<Cx>` with 4 `add` overloads
-- `Workflow<Cx>` with `jobs()` method
-- Remove `CompositeJob`
-- `Action<Cx>` (was `CompositeAction`) with `steps()` method
-- `NodeAction` (was `JavaScriptAction`) — constructor uses `NodeActionConfig`, `NodeActionRuns`
-- `WorkflowCall` (was `CallJob`)
-- `ActionRef` (was `CallAction`) — `from()` accepts `Action<any> | NodeAction | DockerAction`
-- `jobOutputs` accepts `Job<any, O>` (kept as compatibility helper)
+#### ~~2-5. Add config types to templates~~ ✅
 
-#### 2-4. `JOB_WORKFLOW_RUNTIME_TEMPLATE` — Runtime logic (hard) ★★
-
-- Add `StepBuilder` class: `add()` method with `_ctx` tracking, detects function arg → calls with `_ctx` → collects outputs
-- `Job` constructor: accept `(runner, config?)`, apply config fields (permissions, needs, strategy, etc.)
-- `Job.steps`: create `StepBuilder`, pass to callback, transfer `_ctx` back
-- `Job.outputs`: detect function arg → call with `_ctx`
-- Add `JobBuilder` class: `add()` method with `_ctx` tracking for job outputs
-- `Workflow.jobs`: create `JobBuilder`, pass to callback, transfer `_ctx` back
-- Remove `CompositeJob` class, remove `addStep`/`addJob` methods
-- Rename `CompositeAction` → `Action` + add `steps()` with `StepBuilder`
-- Rename `JavaScriptAction` → `NodeAction`
-- Rename `CallJob` → `WorkflowCall`
-- Rename `CallAction` → `ActionRef`
-
-#### 2-5. Add config types to templates (easy)
-
-Add `GajiConfig` interface and `defineConfig` function to `BASE_TYPES_TEMPLATE`:
-- `GajiConfig` interface with all config fields (optional, with defaults)
-- `defineConfig` identity function declaration
-
-Add `defineConfig` runtime to `JOB_WORKFLOW_RUNTIME_TEMPLATE`:
-```javascript
-export function defineConfig(config) { return config; }
-```
-
-Add `defineConfig` declaration to `CLASS_DECLARATIONS_TEMPLATE`.
+- ~~`GajiConfig` interface in `BASE_TYPES_TEMPLATE`~~
+- ~~`defineConfig` declaration in `CLASS_DECLARATIONS_TEMPLATE`~~
+- ~~`defineConfig` runtime in `JOB_WORKFLOW_RUNTIME_TEMPLATE`~~
 
 ### Phase 3 — Depends on Phase 2 (all parallel) ⬜ 미착수
 
 Each group touches different files. All depend on Phase 2 for the new type/runtime shapes.
 
-#### 3A. `src/generator/mod.rs` — getAction overloads + type renames (easy)
+#### ~~3A. `src/generator/mod.rs` — getAction overloads + type renames~~ ✅
 
-Update `getAction` overloads for actions WITH outputs:
-- Add `<Id extends string>` generic on id-required call signature
-- Return type becomes `ActionStep<Outputs, Id>`
-
-Rename type imports/exports:
-- `JavaScriptActionConfig` → `NodeActionConfig`
-- `JavaScriptActionRuns` → `NodeActionRuns`
-
-Update comment on line 288.
+- ~~`<Id extends string>` generic on id-required call signature, `ActionStep<Outputs, Id>` return type~~
+- ~~`JavaScriptActionConfig` → `NodeActionConfig`, `JavaScriptActionRuns` → `NodeActionRuns`~~
+- ~~`GajiConfig` added to imports/re-exports~~
+- ~~Comment updated~~
 
 #### 3B. `tests/integration.rs` — New tests (moderate)
 
