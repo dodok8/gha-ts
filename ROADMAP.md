@@ -627,215 +627,152 @@ Critical path: Phase 2 (2-3, 2-4) → Phase 3 (3B, 3E) → Phase 4
 
 No dependencies. Each group touches different files.
 
-#### 1A. `src/init/migration.rs` — Class renames
+#### ~~1A. `src/init/migration.rs` — Class renames~~ ✅
 
-- `generate_composite_action_ts()`: `CompositeAction` → `Action` in imports and `new` call
-- `generate_javascript_action_ts()`: `JavaScriptAction` → `NodeAction` in imports and `new` call
-- Update 6 test assertions for new class names
+- ~~`generate_composite_action_ts()`: `CompositeAction` → `Action` in imports and `new` call~~
+- ~~`generate_javascript_action_ts()`: `JavaScriptAction` → `NodeAction` in imports and `new` call~~
+- ~~Update 6 test assertions for new class names~~
 
-#### 1B. `src/executor.rs` — Test rename
+#### ~~1B. `src/executor.rs` — Test rename~~ ✅
 
-- Update test `test_composite_action_pipeline` (~line 286): `new CompositeAction(` → `new Action(`
+- ~~doc comment 업데이트: `Test CompositeAction` → `Test Action (formerly CompositeAction)`~~
+- ~~`test_composite_action_pipeline`: `new CompositeAction(` → `new Action(`, `addStep` → `steps(s => s.add(...))`~~
+- ~~`test_job_workflow_pipeline`: `addStep`/`addJob` → `steps()`/`jobs()` builder pattern~~
+- ~~`test_strip_then_execute`: `addStep`/`addJob` → `steps()`/`jobs()` builder pattern~~
 
-#### 1C. `tests/integration.rs` — Existing test renames only
+#### ~~1C. `tests/integration.rs` — Existing test renames only~~ ✅
 
-- `test_composite_job_inheritance`: `extends CompositeJob` → `extends Job`
-- `test_composite_action_migration_roundtrip`: `new CompositeAction(` → `new Action(`
-- `test_javascript_action_migration_roundtrip`: `new JavaScriptAction(` → `new NodeAction(`
+- ~~`test_composite_job_inheritance`: `extends CompositeJob` → `extends Job`, constructor-only config~~
+- ~~`test_composite_action_migration_roundtrip`: `new CompositeAction(` → `new Action(`, `addStep` → `steps()`~~
+- ~~`test_javascript_action_migration_roundtrip`: `new JavaScriptAction(` → `new NodeAction(`~~
+- ~~All tests updated to use `steps()`/`jobs()` builder pattern~~
 
-#### 1D. English doc renames
+#### ~~1D. English doc renames~~ ✅
 
 Each file is independent:
-- `docs/examples/composite-action.md`: `CompositeAction` → `Action`, `CompositeJob` → `Job` in all code examples
-- `docs/examples/javascript-action.md`: `JavaScriptAction` → `NodeAction`, `CallAction` → `ActionRef`
-- `docs/guide/migration.md`: class names in migration output descriptions
-- `docs/reference/actions.md`: `CompositeAction` → `Action`, `jobOutputs()` context mentions
+- ~~`docs/examples/composite-action.md`: `CompositeAction` → `Action`, `CompositeJob` → `Job` in all code examples~~
+- ~~`docs/examples/javascript-action.md`: `JavaScriptAction` → `NodeAction`, `CallAction` → `ActionRef`~~
+- ~~`docs/guide/migration.md`: class names in migration output descriptions~~
+- ~~`docs/reference/actions.md`: `CompositeAction` → `Action`, `jobOutputs()` context mentions~~
+- ~~`docs/reference/api.md`: class renames (`CompositeAction` → `Action`, `JavaScriptAction` → `NodeAction`, `CompositeJob` → Job Inheritance, `CallJob` → `WorkflowCall`, `CallAction` → `ActionRef`)~~
+- ~~`docs/guide/writing-workflows.md`: `CompositeAction` → `Action`, `CompositeJob` → Job Inheritance, `CallJob` → `WorkflowCall`~~
 
-#### 1E. Korean docs + README
+#### ~~1E. Korean docs + README~~ ✅
 
-- `docs/ko/reference/api.md`, `docs/ko/guide/writing-workflows.md`, `docs/ko/examples/composite-action.md`, `docs/ko/examples/javascript-action.md`, `docs/ko/guide/migration.md`, `docs/ko/reference/actions.md` — mirror 1D changes
-- `README.md`: `CompositeAction` → `Action`, `CallAction` → `ActionRef`, `CallJob` → `WorkflowCall`
+- ~~`docs/ko/reference/api.md`, `docs/ko/guide/writing-workflows.md`, `docs/ko/examples/composite-action.md`, `docs/ko/examples/javascript-action.md`, `docs/ko/guide/migration.md`, `docs/ko/reference/actions.md` — mirror 1D changes~~
+- ~~`README.md`: `CompositeAction` → `Action`, `CallAction` → `ActionRef`, `CallJob` → `WorkflowCall`~~
 
-### Phase 2 — Core Templates (sequential, single file)
+### ~~Phase 2 — Core Templates (sequential, single file)~~ ✅
 
-All in `src/generator/templates.rs`. Must be done in order since they're in the same file. Can run in parallel with Phase 1.
+~~All in `src/generator/templates.rs`. Must be done in order since they're in the same file.~~
 
-#### 2-1. `BASE_TYPES_TEMPLATE` — ActionStep Id generic + interface renames (easy)
+#### ~~2-1. `BASE_TYPES_TEMPLATE` — ActionStep Id generic + interface renames~~ ✅
 
-Add `Id` generic to `ActionStep`:
+- ~~`ActionStep<O, Id>` with `readonly id: Id`~~
+- ~~`JavaScriptActionConfig` → `NodeActionConfig`, `JavaScriptActionRuns` → `NodeActionRuns`~~
 
-```typescript
-export interface ActionStep<O = {}, Id extends string = string> extends JobStep {
-    readonly outputs: O;
-    readonly id: Id;
-}
-```
+#### ~~2-2. `GET_ACTION_FALLBACK_DECL_TEMPLATE` — Id generic~~ ✅
 
-Rename config/runs interfaces:
-- `JavaScriptActionConfig` → `NodeActionConfig`
-- `JavaScriptActionRuns` → `NodeActionRuns`
+- ~~`<Id extends string>` on id-required overload returning `ActionStep<Record<string, string>, Id>`~~
 
-#### 2-2. `GET_ACTION_FALLBACK_DECL_TEMPLATE` — Id generic (easy)
+#### ~~2-3. `CLASS_DECLARATIONS_TEMPLATE` — Full rewrite~~ ✅
 
-Add `<Id extends string>` to the id-required overload:
+- ~~`StepBuilder<Cx>`, `JobBuilder<Cx>`, `Job<Cx, O>` with constructor-only `JobConfig`, `Workflow<Cx>` with `jobs()`~~
+- ~~`Action<Cx>`, `NodeAction`, `WorkflowCall`, `ActionRef`, `defineConfig`~~
+- ~~`CompositeJob` removed~~
 
-```typescript
-export declare function getAction<T extends string>(ref: T): {
-    <Id extends string>(config: { id: Id; ... }): ActionStep<Record<string, string>, Id>;
-    (config?: { ... }): JobStep;
-};
-```
+#### ~~2-4. `JOB_WORKFLOW_RUNTIME_TEMPLATE` — Runtime logic~~ ✅
 
-#### 2-3. `CLASS_DECLARATIONS_TEMPLATE` — Full rewrite (moderate) ★
+- ~~`StepBuilder`/`JobBuilder` classes with `_ctx` tracking~~
+- ~~`Job.steps()`/`Job.outputs()` with callback support, constructor-only config~~
+- ~~`Workflow.jobs()` with callback support~~
+- ~~All class renames (`Action`, `NodeAction`, `WorkflowCall`, `ActionRef`), `CompositeJob` removed~~
 
-- `StepBuilder<Cx>` with 4 `add` overloads (callbacks use `output` parameter name)
-- `Job<Cx, O>` with constructor-only config (`JobConfig`), `steps()` method, callback-aware `outputs()`
-- `JobBuilder<Cx>` with 4 `add` overloads
-- `Workflow<Cx>` with `jobs()` method
-- Remove `CompositeJob`
-- `Action<Cx>` (was `CompositeAction`) with `steps()` method
-- `NodeAction` (was `JavaScriptAction`) — constructor uses `NodeActionConfig`, `NodeActionRuns`
-- `WorkflowCall` (was `CallJob`)
-- `ActionRef` (was `CallAction`) — `from()` accepts `Action<any> | NodeAction | DockerAction`
-- `jobOutputs` accepts `Job<any, O>` (kept as compatibility helper)
+#### ~~2-5. Add config types to templates~~ ✅
 
-#### 2-4. `JOB_WORKFLOW_RUNTIME_TEMPLATE` — Runtime logic (hard) ★★
+- ~~`GajiConfig` interface in `BASE_TYPES_TEMPLATE`~~
+- ~~`defineConfig` declaration in `CLASS_DECLARATIONS_TEMPLATE`~~
+- ~~`defineConfig` runtime in `JOB_WORKFLOW_RUNTIME_TEMPLATE`~~
 
-- Add `StepBuilder` class: `add()` method with `_ctx` tracking, detects function arg → calls with `_ctx` → collects outputs
-- `Job` constructor: accept `(runner, config?)`, apply config fields (permissions, needs, strategy, etc.)
-- `Job.steps`: create `StepBuilder`, pass to callback, transfer `_ctx` back
-- `Job.outputs`: detect function arg → call with `_ctx`
-- Add `JobBuilder` class: `add()` method with `_ctx` tracking for job outputs
-- `Workflow.jobs`: create `JobBuilder`, pass to callback, transfer `_ctx` back
-- Remove `CompositeJob` class, remove `addStep`/`addJob` methods
-- Rename `CompositeAction` → `Action` + add `steps()` with `StepBuilder`
-- Rename `JavaScriptAction` → `NodeAction`
-- Rename `CallJob` → `WorkflowCall`
-- Rename `CallAction` → `ActionRef`
+### ~~Phase 3 — Depends on Phase 2 (all parallel)~~ ✅
 
-#### 2-5. Add config types to templates (easy)
+~~Each group touches different files. All depend on Phase 2 for the new type/runtime shapes.~~
 
-Add `GajiConfig` interface and `defineConfig` function to `BASE_TYPES_TEMPLATE`:
-- `GajiConfig` interface with all config fields (optional, with defaults)
-- `defineConfig` identity function declaration
+#### ~~3A. `src/generator/mod.rs` — getAction overloads + type renames~~ ✅
 
-Add `defineConfig` runtime to `JOB_WORKFLOW_RUNTIME_TEMPLATE`:
-```javascript
-export function defineConfig(config) { return config; }
-```
+- ~~`<Id extends string>` generic on id-required call signature, `ActionStep<Outputs, Id>` return type~~
+- ~~`JavaScriptActionConfig` → `NodeActionConfig`, `JavaScriptActionRuns` → `NodeActionRuns`~~
+- ~~`GajiConfig` added to imports/re-exports~~
+- ~~Comment updated~~
 
-Add `defineConfig` declaration to `CLASS_DECLARATIONS_TEMPLATE`.
+#### ~~3B. `tests/integration.rs` — New tests (moderate)~~ ✅
 
-### Phase 3 — Depends on Phase 2 (all parallel)
+- ~~Add `test_step_builder_callback_context`: `steps()` builder callback receives previous step outputs via `output` parameter~~
+- ~~Add `test_outputs_callback_context`: `outputs()` callback receives previous step outputs via `output` parameter~~
+- ~~Add `test_job_builder_callback_context`: `jobs()` builder callback receives previous job outputs via `output` parameter (replaces `jobOutputs` pattern)~~
 
-Each group touches different files. All depend on Phase 2 for the new type/runtime shapes.
+#### ~~3C. `src/init/templates.rs` — EXAMPLE_WORKFLOW_TEMPLATE (easy)~~ ✅
 
-#### 3A. `src/generator/mod.rs` — getAction overloads + type renames (easy)
+- ~~Update to use `steps(s => s.add(...))` and `jobs(j => j.add(...))` patterns~~
 
-Update `getAction` overloads for actions WITH outputs:
-- Add `<Id extends string>` generic on id-required call signature
-- Return type becomes `ActionStep<Outputs, Id>`
+#### ~~3D. `CLAUDE.md` — Project documentation (easy)~~ ✅
 
-Rename type imports/exports:
-- `JavaScriptActionConfig` → `NodeActionConfig`
-- `JavaScriptActionRuns` → `NodeActionRuns`
+- ~~Update "Key Design Patterns" section: remove `CompositeJob`, rename classes~~
+- ~~Update "Runtime Class Hierarchy" table: apply renames, remove CompositeJob~~
+- ~~Update "Adding a new action type" and "Adding a new job type" sections~~
+- ~~Update "Configuration Files" table: `.gaji.toml` → `gaji.config.ts`, `.gaji.local.toml` → `gaji.config.local.ts`~~
+- ~~Update "Configuration hierarchy" line: `env vars > gaji.config.local.ts > gaji.config.ts > defaults`~~
 
-Update comment on line 288.
+#### ~~3E. `src/config.rs` — Replace TOML loading with TS execution (moderate) ★~~ ✅
 
-#### 3B. `tests/integration.rs` — New tests (moderate)
+- ~~Add `TsGajiConfig` intermediate struct with camelCase JSON deserialization~~
+- ~~Add `load_from_ts()` that strips types, executes in QuickJS, deserializes JSON~~
+- ~~`Config::load()` tries `gaji.config.ts` first, falls back to `.gaji.toml`~~
+- ~~Removed `save()`, `save_to()`, and `Serialize` derives~~
+- ~~Added 3 config tests: basic, with local, empty config~~
 
-- Add `test_step_builder_callback_context`: `steps()` builder callback receives previous step outputs via `output` parameter
-- Add `test_outputs_callback_context`: `outputs()` callback receives previous step outputs via `output` parameter
-- Add `test_job_builder_callback_context`: `jobs()` builder callback receives previous job outputs via `output` parameter (replaces `jobOutputs` pattern)
+#### ~~3F. `src/init/mod.rs` + `src/init/templates.rs` — Generate TS config (moderate)~~ ✅
 
-#### 3C. `src/init/templates.rs` — EXAMPLE_WORKFLOW_TEMPLATE (easy)
+- ~~`gaji init` generates `gaji.config.ts` instead of `.gaji.toml`~~
+- ~~Added `GAJI_CONFIG_TEMPLATE` constant for default `gaji.config.ts` content~~
+- ~~Updated `.gitignore` template: `.gaji.local.toml` → `gaji.config.local.ts`~~
+- ~~Updated `print_next_steps()` with TS config example~~
+- ~~Updated interactive init to write TS config directly~~
 
-- Update to use `steps(s => s.add(...))` and `jobs(j => j.add(...))` patterns
+### ~~Phase 4 — Depends on Phase 3 (all parallel)~~ ✅
 
-#### 3D. `CLAUDE.md` — Project documentation (easy)
+#### ~~4A. `src/init/migration.rs` — TOML → TS config migration + migration codegen fix~~ ✅
 
-- Update "Key Design Patterns" section: remove `CompositeJob`, rename classes
-- Update "Runtime Class Hierarchy" table: apply renames, remove CompositeJob
-- Update "Adding a new action type" and "Adding a new job type" sections
-- Update "Configuration Files" table: `.gaji.toml` → `gaji.config.ts`, `.gaji.local.toml` → `gaji.config.local.ts`
-- Update "Configuration hierarchy" line: `env vars > gaji.config.local.ts > gaji.config.ts > defaults`
+- ~~Detect existing `.gaji.toml` during init, generate `gaji.config.ts`~~
+- ~~Generate `gaji.config.local.ts` from `.gaji.local.toml` if present~~
+- ~~Prompt user before removing old TOML files~~
+- ~~Fix migration codegen: `.addStep()` → `.steps(s => s.add(...))`, `.addJob()` → `.jobs(j => j.add(...))`~~
 
-#### 3E. `src/config.rs` — Replace TOML loading with TS execution (moderate) ★
+#### ~~4B. Config tests~~ ✅
 
-- Remove `toml` dependency for config loading
-- Add `load_from_ts()` that:
-  1. Checks for `gaji.config.ts` (falls back to `.gaji.toml` for backward compat)
-  2. Strips types with oxc
-  3. Executes in QuickJS with a wrapper that captures `export default`
-  4. Deserializes JSON result into `Config` struct
-- Add `merge_local_ts()` for `gaji.config.local.ts`
-- Keep field mapping: `workflows` → `workflows_dir`, `output` → `output_dir`, `generated` → `generated_dir`, `watch.debounce` → `watch.debounce_ms`, `build.cacheTtlDays` → `build.cache_ttl_days`
-- Keep `resolve_token()` priority: env var > local config > config > None
+- ~~`config.rs`: env var precedence test~~
+- ~~`integration.rs`: full pipeline test with `gaji.config.ts`~~
 
-#### 3F. `src/init/mod.rs` + `src/init/templates.rs` — Generate TS config (moderate)
+#### ~~4C. `docs/reference/api.md` — API reference rewrite~~ ✅
 
-- `gaji init` generates `gaji.config.ts` instead of `.gaji.toml`
-- Add `GAJI_CONFIG_TEMPLATE` constant for default `gaji.config.ts` content
-- Update `.gitignore` template: replace `.gaji.local.toml` with `gaji.config.local.ts`
+- ~~`StepBuilder`, `JobBuilder` sections, constructor-only `JobConfig`, `defineConfig`/`GajiConfig`~~
+- ~~All examples updated to callback builder pattern~~
 
-### Phase 4 — Depends on Phase 3 (all parallel)
+#### ~~4D. `docs/guide/writing-workflows.md` — Guide rewrite~~ ✅
 
-#### 4A. `src/init/migration.rs` — TOML → TS config migration (moderate)
+- ~~All examples updated to `.steps(s => s.add(...))`, `.jobs(j => j.add(...))`, constructor config~~
 
-Depends on 3E.
+#### ~~4E. Config documentation + all remaining doc updates~~ ✅
 
-- Detect existing `.gaji.toml` during init
-- Generate equivalent `gaji.config.ts` from TOML values
-- Generate `gaji.config.local.ts` from `.gaji.local.toml` if present
-- Prompt user before removing old TOML files
+- ~~`docs/guide/migration.md`: Configuration migration section, all old API examples updated~~
+- ~~`docs/reference/actions.md`, `docs/guide/why.md`: old API examples updated~~
+- ~~`docs/examples/*.md`: all old API examples updated (simple-ci, matrix-build, composite-action, javascript-action)~~
+- ~~Korean mirrors: same changes applied to all `docs/ko/` files~~
 
-#### 4B. Config tests (moderate)
+#### ~~4F. Korean doc rewrites~~ ✅
 
-Depends on 3E + 3F.
-
-- Unit tests in `config.rs`: parse TS config, merge local, env var precedence
-- Integration test: full pipeline with `gaji.config.ts` instead of `.gaji.toml`
-
-#### 4C. `docs/reference/api.md` — API reference rewrite (moderate)
-
-Depends on Phase 2 (API shape).
-
-- Add `StepBuilder` section with 4 `add` overloads
-- Update `Job` section: `Cx` generic, constructor-only `JobConfig`, `steps()` method, callback `outputs`
-- Add `JobBuilder` section with 4 `add` overloads
-- Update `Workflow` section: `Cx` generic, `jobs()` method
-- Remove `CompositeJob` section entirely
-- Rename `CompositeAction` → `Action` section with `steps()` method
-- Rename `JavaScriptAction` → `NodeAction` section
-- Rename `CallJob` → `WorkflowCall` section
-- Rename `CallAction` → `ActionRef` section, update `from()` signature
-- Update `jobOutputs()` section: note it's a compatibility helper, show `jobs()` callback as primary pattern
-- Add examples for each changed class showing callback/context usage
-
-#### 4D. `docs/guide/writing-workflows.md` — Guide rewrite (moderate)
-
-Depends on Phase 2 (API shape).
-
-- Update "Steps" section: show `steps(s => s.add(...))` pattern with direct and callback forms
-- Replace `CompositeJob` section: show extending `Job` directly (CompositeJob removed)
-- Update `CallJob` → `WorkflowCall` in reusable workflow section
-- Rewrite "Outputs" section: show `outputs(output => ...)` and `jobs(j => j.add("id", output => ...))` as primary patterns, `jobOutputs()` as compatibility helper
-
-#### 4E. Config documentation (easy)
-
-Depends on 3E + 3F.
-
-- `docs/guide/writing-workflows.md`: Update configuration section with `gaji.config.ts` examples
-- `docs/reference/api.md`: Add `defineConfig` and `GajiConfig` to API reference
-- `docs/guide/migration.md`: Add `.gaji.toml` → `gaji.config.ts` migration instructions
-- `docs/ko/` mirrors: Apply same config documentation changes to Korean docs
-
-#### 4F. Korean doc rewrites (moderate)
-
-Depends on 4C + 4D.
-
-- `docs/ko/reference/api.md` — mirror 4C
-- `docs/ko/guide/writing-workflows.md` — mirror 4D
+- ~~`docs/ko/reference/api.md`, `docs/ko/guide/writing-workflows.md`, `docs/ko/guide/migration.md` — full rewrites~~
+- ~~`docs/ko/examples/*.md`, `docs/ko/reference/actions.md`, `docs/ko/guide/why.md` — old API examples updated~~
 
 ### Documentation Change Examples
 

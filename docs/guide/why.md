@@ -48,20 +48,24 @@ const checkout = getAction("actions/checkout@v5");
 const setupNode = getAction("actions/setup-node@v4");
 
 const build = new Job("ubuntu-latest")
-  .addStep(checkout({}))
-  .addStep(setupNode({
-    with: {
-      "node-version": "20",  // ✅ Correct key name, caught at compile time, full autocomplete and type checking
-      cache: "npm",
-    },
-  }))
-  .addStep({ run: "npm ci" })
-  .addStep({ run: "npm test" });
+  .steps(s => s
+    .add(checkout({}))
+    .add(setupNode({
+      with: {
+        "node-version": "20",  // ✅ Correct key name, caught at compile time, full autocomplete and type checking
+        cache: "npm",
+      },
+    }))
+    .add({ run: "npm ci" })
+    .add({ run: "npm test" })
+  );
 
 const workflow = new Workflow({
   name: "CI",
   on: { push: { branches: ["main"] } },
-}).addJob("build", build);
+}).jobs(j => j
+    .add("build", build)
+  );
 
 workflow.build("ci");
 ```

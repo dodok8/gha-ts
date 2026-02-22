@@ -5,38 +5,40 @@ const checkout = getAction("actions/checkout@v5");
 const rustToolchain = getAction("dtolnay/rust-toolchain@stable");
 const rustCache = getAction("Swatinem/rust-cache@v2");
 
-const buildWorkflows = new Job("ubuntu-latest")
-  .addStep(checkout({
-    with: {
-      token: "${{ secrets.PAT }}",
-      "fetch-depth": 1,
-    },
-  }))
-  .addStep(rustToolchain({}))
-  .addStep(rustCache({}))
-  .addStep({
-    name: "Build gaji",
-    run: "cargo build --release",
-  })
-  .addStep({
-    name: "Generate Type",
-    run: "./target/release/gaji dev",
-  })
-  .addStep({
-    name: "Generate workflows",
-    run: "./target/release/gaji build",
-  })
-  .addStep({
-    name: "Commit and push",
-    run: [
-      'git config user.name "github-actions[bot]"',
-      'git config user.email "github-actions[bot]@users.noreply.github.com"',
-      "git add .github/workflows/",
-      'git diff --cached --quiet || (git commit -m "chore: update generated workflows" && git push)',
-    ].join("\n"),
-  });
+const buildWorkflows = new Job("ubuntu-latest").steps((s) =>
+  s
+    .add(checkout({
+      with: {
+        token: "${{ secrets.PAT }}",
+        "fetch-depth": 1,
+      },
+    }))
+    .add(rustToolchain({}))
+    .add(rustCache({}))
+    .add({
+      name: "Build gaji",
+      run: "cargo build --release",
+    })
+    .add({
+      name: "Generate Type",
+      run: "./target/release/gaji dev",
+    })
+    .add({
+      name: "Generate workflows",
+      run: "./target/release/gaji build",
+    })
+    .add({
+      name: "Commit and push",
+      run: [
+        'git config user.name "github-actions[bot]"',
+        'git config user.email "github-actions[bot]@users.noreply.github.com"',
+        "git add .github/workflows/",
+        'git diff --cached --quiet || (git commit -m "chore: update generated workflows" && git push)',
+      ].join("\n"),
+    }),
+);
 
-const workflow = new Workflow({
+new Workflow({
   name: "Update Workflows",
   on: {
     push: {
@@ -47,6 +49,4 @@ const workflow = new Workflow({
   permissions: {
     contents: "write",
   },
-}).addJob("build-workflows", buildWorkflows);
-
-workflow.build("update-workflows");
+}).jobs((j) => j.add("build-workflows", buildWorkflows)).build("update-workflows");

@@ -10,26 +10,28 @@ const release = new Job("ubuntu-latest", {
   permissions: {
     contents: "write",
   },
-})
-  .addStep(
-    checkout({
-      with: {
-        "fetch-depth": 0,
-        "persist-credentials": false,
-      },
-    })
-  )
-  .addStep(rustToolchain({}))
-  .addStep(
-    releasePlz({
-      with: {
-        command: "release",
-      },
-      env: {
-        GITHUB_TOKEN: "${{ secrets.PAT }}",
-      },
-    })
-  );
+}).steps((s) =>
+  s
+    .add(
+      checkout({
+        with: {
+          "fetch-depth": 0,
+          "persist-credentials": false,
+        },
+      }),
+    )
+    .add(rustToolchain({}))
+    .add(
+      releasePlz({
+        with: {
+          command: "release",
+        },
+        env: {
+          GITHUB_TOKEN: "${{ secrets.PAT }}",
+        },
+      }),
+    ),
+);
 
 // Job 2: Release PR (create/update release PR with version bump + changelog)
 const releasePr = new Job("ubuntu-latest", {
@@ -37,28 +39,30 @@ const releasePr = new Job("ubuntu-latest", {
     contents: "write",
     "pull-requests": "write",
   },
-})
-  .addStep(
-    checkout({
-      with: {
-        "fetch-depth": 0,
-        "persist-credentials": false,
-      },
-    })
-  )
-  .addStep(rustToolchain({}))
-  .addStep(
-    releasePlz({
-      with: {
-        command: "release-pr",
-      },
-      env: {
-        GITHUB_TOKEN: "${{ secrets.PAT }}",
-      },
-    })
-  );
+}).steps((s) =>
+  s
+    .add(
+      checkout({
+        with: {
+          "fetch-depth": 0,
+          "persist-credentials": false,
+        },
+      }),
+    )
+    .add(rustToolchain({}))
+    .add(
+      releasePlz({
+        with: {
+          command: "release-pr",
+        },
+        env: {
+          GITHUB_TOKEN: "${{ secrets.PAT }}",
+        },
+      }),
+    ),
+);
 
-const workflow = new Workflow({
+new Workflow({
   name: "Release-plz",
   on: {
     push: {
@@ -69,8 +73,8 @@ const workflow = new Workflow({
     group: "release-plz-${{ github.ref }}",
     "cancel-in-progress": false,
   },
-})
-  .addJob("release-plz-release", release)
-  .addJob("release-plz-pr", releasePr);
-
-workflow.build("release-plz");
+}).jobs((j) =>
+  j
+    .add("release-plz-release", release)
+    .add("release-plz-pr", releasePr),
+).build("release-plz");

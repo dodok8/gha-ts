@@ -204,10 +204,24 @@ pub async fn interactive_init(root: &Path) -> Result<()> {
         ..Default::default()
     };
 
-    // Save the custom config
-    let config_path = root.join(".gaji.toml");
-    config.save_to(&config_path)?;
-    println!("{} Created .gaji.toml with custom directories", "✓".green());
+    // Write the TS config file
+    let config_path = root.join(crate::config::TS_CONFIG_FILE);
+    let ts_content = format!(
+        r#"import {{ defineConfig }} from "./generated/index.js";
+
+export default defineConfig({{
+    workflows: "{}",
+    output: "{}",
+    generated: "{}",
+}});
+"#,
+        config.project.workflows_dir, config.project.output_dir, config.project.generated_dir,
+    );
+    std::fs::write(&config_path, ts_content)?;
+    println!(
+        "{} Created gaji.config.ts with custom directories",
+        "✓".green()
+    );
 
     // Create directories based on custom config
     tokio::fs::create_dir_all(root.join(&interactive_config.workflows_dir)).await?;

@@ -24,12 +24,14 @@ const setupNode = getAction("actions/setup-node@v4");
 
 // 워크플로우에서 사용
 const job = new Job("ubuntu-latest")
-  .addStep(checkout({}))
-  .addStep(setupNode({
-    with: {
-      "node-version": "20",  // ✅ 타입 안전!
-    },
-  }));
+  .steps(s => s
+    .add(checkout({}))
+    .add(setupNode({
+      with: {
+        "node-version": "20",  // ✅ 타입 안전!
+      },
+    }))
+  );
 ```
 
 ## 액션 참조 형식
@@ -118,10 +120,10 @@ gaji add actions/checkout@v5
 const checkout = getAction("actions/checkout@v5");
 
 // 기본 사용
-.addStep(checkout({}))
+.add(checkout({}))
 
 // 옵션과 함께
-.addStep(checkout({
+.add(checkout({
   with: {
     repository: "owner/repo",
     ref: "main",
@@ -142,7 +144,7 @@ gaji add actions/setup-node@v4
 ```typescript
 const setupNode = getAction("actions/setup-node@v4");
 
-.addStep(setupNode({
+.add(setupNode({
   with: {
     "node-version": "20",
     cache: "npm",
@@ -161,7 +163,7 @@ gaji add actions/cache@v4
 ```typescript
 const cache = getAction("actions/cache@v4");
 
-.addStep(cache({
+.add(cache({
   with: {
     path: "node_modules",
     key: "${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}",
@@ -181,7 +183,7 @@ gaji add actions/upload-artifact@v4
 ```typescript
 const uploadArtifact = getAction("actions/upload-artifact@v4");
 
-.addStep(uploadArtifact({
+.add(uploadArtifact({
   with: {
     name: "build-output",
     path: "dist/",
@@ -200,7 +202,7 @@ gaji add actions/download-artifact@v4
 ```typescript
 const downloadArtifact = getAction("actions/download-artifact@v4");
 
-.addStep(downloadArtifact({
+.add(downloadArtifact({
   with: {
     name: "build-output",
     path: "dist/",
@@ -231,15 +233,17 @@ const setupBuildx = getAction("docker/setup-buildx-action@v3");
 const buildPush = getAction("docker/build-push-action@v5");
 
 const job = new Job("ubuntu-latest")
-  .addStep(checkout({}))
-  .addStep(setupBuildx({}))
-  .addStep(buildPush({
-    with: {
-      context: ".",
-      push: true,
-      tags: "user/app:latest",
-    },
-  }));
+  .steps(s => s
+    .add(checkout({}))
+    .add(setupBuildx({}))
+    .add(buildPush({
+      with: {
+        context: ".",
+        push: true,
+        tags: "user/app:latest",
+      },
+    }))
+  );
 ```
 
 ## 로컬 액션
@@ -249,14 +253,14 @@ const job = new Job("ubuntu-latest")
 ```typescript
 const myAction = getAction("./my-action");
 
-.addStep(myAction({
+.add(myAction({
   with: {
     input: "value",
   },
 }))
 ```
 
-먼저 액션을 생성해야 합니다. [CompositeAction](./api.md#compositeaction)을 참조하세요.
+먼저 액션을 생성해야 합니다. [Action](./api.md#action)을 참조하세요.
 
 ## 액션 출력
 

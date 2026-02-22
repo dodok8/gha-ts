@@ -42,7 +42,7 @@ src/
 ├── main.rs          # CLI entry point, command routing via clap
 ├── lib.rs           # Public module exports
 ├── cli.rs           # CLI command/argument definitions (clap derive)
-├── config.rs        # Configuration loading (.gaji.toml / .gaji.local.toml)
+├── config.rs        # Configuration loading (gaji.config.ts / gaji.config.local.ts)
 ├── builder.rs       # TypeScript → YAML workflow compilation pipeline
 ├── executor.rs      # JavaScript execution via QuickJS runtime
 ├── cache.rs         # Action metadata caching (.gaji-cache.json)
@@ -90,11 +90,12 @@ The core pipeline is: **TypeScript → Parse → Execute → YAML**
 
 ## Key Design Patterns
 
-- **Builder pattern**: `WorkflowBuilder`, `Job`, `CompositeJob`, `Workflow`, `CallJob`, `CallAction`, `CompositeAction`, `JavaScriptAction`
+- **Builder pattern**: `WorkflowBuilder`, `Job`, `Workflow`, `WorkflowCall`, `ActionRef`, `Action`, `NodeAction`, `DockerAction`
+- **Callback builder pattern**: `StepBuilder` accumulates step context (`_ctx`), `JobBuilder` accumulates job output context — callbacks receive previous outputs for type-safe chaining
 - **Visitor pattern**: `ActionRefExtractor` traverses oxc AST nodes
 - **Error handling**: `anyhow::Result<T>` with `?` propagation throughout; `thiserror` for typed errors
 - **Async**: Tokio runtime for all I/O-bound operations (HTTP, filesystem)
-- **Configuration hierarchy**: env vars > `.gaji.local.toml` > `.gaji.toml` > defaults
+- **Configuration hierarchy**: env vars > `gaji.config.local.ts` > `gaji.config.ts` > defaults
 
 ## Code Conventions
 
@@ -111,8 +112,8 @@ The core pipeline is: **TypeScript → Parse → Execute → YAML**
 | File | Purpose | Committed |
 |------|---------|-----------|
 | `Cargo.toml` | Rust dependencies and release profile | Yes |
-| `.gaji.toml` | Project config (dirs, watch settings, build options) | Yes |
-| `.gaji.local.toml` | Private config (GitHub token, custom API URL) | No |
+| `gaji.config.ts` | Project config (dirs, watch settings, build options) | Yes |
+| `gaji.config.local.ts` | Private config (GitHub token, custom API URL) | No |
 | `mise.toml` | Dev environment (deno latest, node LTS) | Yes |
 | `release-plz.toml` | Automated version bumping config | Yes |
 
@@ -173,9 +174,9 @@ The release binary is optimized for size (important for npm distribution):
 
 **Adding support for a new action.yml field**: Update `fetcher.rs` for parsing, `generator/types.rs` for type generation, and `generator/templates.rs` if base types need changes.
 
-**Adding a new action type** (like `JavaScriptAction`): Add runtime class to `generator/templates.rs` (`JOB_WORKFLOW_RUNTIME_TEMPLATE`), add TypeScript interfaces to `BASE_TYPES_TEMPLATE`, add type declaration in `generator/mod.rs` (`generate_index_dts`). Output type "action" writes to `.github/actions/<id>/action.yml`.
+**Adding a new action type** (like `NodeAction`, `DockerAction`): Add runtime class to `generator/templates.rs` (`JOB_WORKFLOW_RUNTIME_TEMPLATE`), add TypeScript interfaces to `BASE_TYPES_TEMPLATE`, add type declaration in `CLASS_DECLARATIONS_TEMPLATE`. Output type "action" writes to `.github/actions/<id>/action.yml`.
 
-**Adding a new job type** (like `CompositeJob`): Add runtime class to `generator/templates.rs` (`JOB_WORKFLOW_RUNTIME_TEMPLATE`), add type declaration in `generator/mod.rs` (`generate_index_dts`). Job types that extend `Job` inherit its `toJSON()` and produce standard `JobDefinition` output.
+**Adding a new job type**: Extend the `Job` class. Job subclasses inherit `steps()`, `outputs()`, and `toJSON()` to produce standard `JobDefinition` output. No separate runtime class is needed — use JavaScript class inheritance (`class MyJob extends Job`).
 
 **Modifying the build pipeline**: Core logic is in `builder.rs` (orchestration) and `executor.rs` (JS execution). The executor strips types with oxc and runs the result in QuickJS.
 
@@ -185,13 +186,15 @@ The TypeScript runtime classes in `generator/templates.rs` follow this hierarchy
 
 | Class | Purpose | Output Type | Build Target |
 |-------|---------|-------------|--------------|
+| `StepBuilder` | Accumulates steps with `_ctx` for output chaining | Internal | Used by `Job.steps()` / `Action.steps()` |
+| `JobBuilder` | Accumulates jobs with `_ctx` for output chaining | Internal | Used by `Workflow.jobs()` |
 | `Job` | Standard workflow job | `JobDefinition` | Part of `Workflow` |
-| `CompositeJob` | Reusable job template (extends `Job`) | `JobDefinition` | Part of `Workflow` |
 | `Workflow` | Complete workflow | `WorkflowDefinition` | `.github/workflows/<id>.yml` |
-| `CompositeAction` | Reusable composite action | `action.yml` (composite) | `.github/actions/<id>/action.yml` |
-| `JavaScriptAction` | Node.js-based action | `action.yml` (node) | `.github/actions/<id>/action.yml` |
-| `CallJob` | Reusable workflow call (no steps) | `{ uses: ... }` | Part of `Workflow` |
-| `CallAction` | Reference to local action | `{ uses: "./.github/actions/<id>" }` | Step in a `Job` |
+| `Action` | Reusable composite action | `action.yml` (composite) | `.github/actions/<id>/action.yml` |
+| `NodeAction` | Node.js-based action | `action.yml` (node) | `.github/actions/<id>/action.yml` |
+| `DockerAction` | Docker-based action | `action.yml` (docker) | `.github/actions/<id>/action.yml` |
+| `WorkflowCall` | Reusable workflow call (no steps) | `{ uses: ... }` | Part of `Workflow` |
+| `ActionRef` | Reference to local action | `{ uses: "./.github/actions/<id>" }` | Step in a `Job` |
 
 ## Files to Never Edit Manually
 

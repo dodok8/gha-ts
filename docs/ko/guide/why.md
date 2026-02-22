@@ -48,20 +48,22 @@ const checkout = getAction("actions/checkout@v5");
 const setupNode = getAction("actions/setup-node@v4");
 
 const build = new Job("ubuntu-latest")
-  .addStep(checkout({}))
-  .addStep(setupNode({
-    with: {
-      "node-version": "20",  // ✅ 올바른 키 이름, 컴파일 시점에 오류 포착,완전한 자동완성 및 타입 체크
-      cache: "npm",  
-    },
-  }))
-  .addStep({ run: "npm ci" })
-  .addStep({ run: "npm test" });
+  .steps(s => s
+    .add(checkout({}))
+    .add(setupNode({
+      with: {
+        "node-version": "20",  // ✅ 올바른 키 이름, 컴파일 시점에 오류 포착,완전한 자동완성 및 타입 체크
+        cache: "npm",
+      },
+    }))
+    .add({ run: "npm ci" })
+    .add({ run: "npm test" })
+  );
 
 const workflow = new Workflow({
   name: "CI",
   on: { push: { branches: ["main"] } },
-}).addJob("build", build);
+}).jobs(j => j.add("build", build));
 
 workflow.build("ci");
 ```

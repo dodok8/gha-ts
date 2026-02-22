@@ -63,37 +63,27 @@ import { getAction, Job, Workflow } from "../generated/index.js";
 const checkout = getAction("actions/checkout@v5");
 const setupNode = getAction("actions/setup-node@v4");
 
-// Define the build job
-const build = new Job("ubuntu-latest")
-  .addStep(checkout({
-    name: "Checkout code",
-  }))
-  .addStep(setupNode({
-    name: "Setup Node.js",
-    with: {
-      "node-version": "20",  // ✅ Autocomplete available!
-    },
-  }))
-  .addStep({
-    name: "Install dependencies",
-    run: "npm ci",
-  })
-  .addStep({
-    name: "Run tests",
-    run: "npm test",
-  });
-
-// Create the workflow
-const workflow = new Workflow({
+// Create the workflow with callback builder API
+new Workflow({
   name: "CI",
   on: {
     push: { branches: ["main"] },
     pull_request: { branches: ["main"] },
   },
-}).addJob("build", build);
-
-// Build the YAML file
-workflow.build("ci");
+}).jobs(j => j
+  .add("build",
+    new Job("ubuntu-latest")
+      .steps(s => s
+        .add(checkout({ name: "Checkout code" }))
+        .add(setupNode({
+          name: "Setup Node.js",
+          with: { "node-version": "20" },  // ✅ Autocomplete available!
+        }))
+        .add({ name: "Install dependencies", run: "npm ci" })
+        .add({ name: "Run tests", run: "npm test" })
+      )
+  )
+).build("ci");
 ```
 
 ## Generate Types and Build

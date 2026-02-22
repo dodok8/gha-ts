@@ -12,28 +12,30 @@ const setupNode = getAction("actions/setup-node@v4");
 
 // 테스트 작업 정의
 const test = new Job("ubuntu-latest")
-  .addStep(checkout({
-    name: "Checkout code",
-  }))
-  .addStep(setupNode({
-    name: "Setup Node.js",
-    with: {
-      "node-version": "20",
-      cache: "npm",
-    },
-  }))
-  .addStep({
-    name: "Install dependencies",
-    run: "npm ci",
-  })
-  .addStep({
-    name: "Run linter",
-    run: "npm run lint",
-  })
-  .addStep({
-    name: "Run tests",
-    run: "npm test",
-  });
+  .steps(s => s
+    .add(checkout({
+      name: "Checkout code",
+    }))
+    .add(setupNode({
+      name: "Setup Node.js",
+      with: {
+        "node-version": "20",
+        cache: "npm",
+      },
+    }))
+    .add({
+      name: "Install dependencies",
+      run: "npm ci",
+    })
+    .add({
+      name: "Run linter",
+      run: "npm run lint",
+    })
+    .add({
+      name: "Run tests",
+      run: "npm test",
+    })
+  );
 
 // 워크플로우 생성
 const workflow = new Workflow({
@@ -46,7 +48,7 @@ const workflow = new Workflow({
       branches: ["main"],
     },
   },
-}).addJob("test", test);
+}).jobs(j => j.add("test", test));
 
 // YAML로 빌드
 workflow.build("ci");

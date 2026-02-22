@@ -15,28 +15,30 @@ const setupNode = getAction("actions/setup-node@v4");
 
 // Define the test job
 const test = new Job("ubuntu-latest")
-  .addStep(checkout({
-    name: "Checkout code",
-  }))
-  .addStep(setupNode({
-    name: "Setup Node.js",
-    with: {
-      "node-version": "20",
-      cache: "npm",
-    },
-  }))
-  .addStep({
-    name: "Install dependencies",
-    run: "npm ci",
-  })
-  .addStep({
-    name: "Run linter",
-    run: "npm run lint",
-  })
-  .addStep({
-    name: "Run tests",
-    run: "npm test",
-  });
+  .steps(s => s
+    .add(checkout({
+      name: "Checkout code",
+    }))
+    .add(setupNode({
+      name: "Setup Node.js",
+      with: {
+        "node-version": "20",
+        cache: "npm",
+      },
+    }))
+    .add({
+      name: "Install dependencies",
+      run: "npm ci",
+    })
+    .add({
+      name: "Run linter",
+      run: "npm run lint",
+    })
+    .add({
+      name: "Run tests",
+      run: "npm test",
+    })
+  );
 
 // Create the workflow
 const workflow = new Workflow({
@@ -49,7 +51,9 @@ const workflow = new Workflow({
       branches: ["main"],
     },
   },
-}).addJob("test", test);
+}).jobs(j => j
+    .add("test", test)
+  );
 
 // Build to YAML
 workflow.build("ci");
@@ -127,11 +131,13 @@ setupNode({
 
 ```typescript
 const test = new Job("ubuntu-latest")
-  .addStep(checkout({}))
-  .addStep(setupNode({ with: { "node-version": "20" } }))
-  .addStep({ run: "npm ci" })
-  .addStep({ run: "npm test" })
-  .addStep({ run: "npm run build" });  // Add build
+  .steps(s => s
+    .add(checkout({}))
+    .add(setupNode({ with: { "node-version": "20" } }))
+    .add({ run: "npm ci" })
+    .add({ run: "npm test" })
+    .add({ run: "npm run build" })  // Add build
+  );
 ```
 
 ## Next Steps
