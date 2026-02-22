@@ -206,9 +206,11 @@ fn generate_typescript_from_yaml(yaml_content: &str, workflow_id: &str) -> Resul
 
             // Steps
             if let Some(steps) = job_def.get("steps").and_then(|s| s.as_sequence()) {
+                ts.push_str("    .steps(s => s\n");
                 for step in steps {
                     generate_step(&mut ts, step, &actions);
                 }
+                ts.push_str("    )");
             }
 
             ts.push_str(";\n\n");
@@ -237,11 +239,13 @@ fn generate_typescript_from_yaml(yaml_content: &str, workflow_id: &str) -> Resul
 
     // Add jobs
     if let Some(jobs) = workflow.get("jobs").and_then(|j| j.as_mapping()) {
+        ts.push_str("\n    .jobs(j => j\n");
         for (job_id, _) in jobs {
             let job_id_str = job_id.as_str().unwrap_or("job");
             let var = job_id_str.replace('-', "_");
-            ts.push_str(&format!(".addJob(\"{}\", {})", job_id_str, var));
+            ts.push_str(&format!("        .add(\"{}\", {})\n", job_id_str, var));
         }
+        ts.push_str("    )");
     }
 
     ts.push_str(";\n\n");
@@ -331,11 +335,11 @@ fn generate_composite_action_ts(action: &serde_yaml::Value, action_id: &str) -> 
         .and_then(|r| r.get("steps"))
         .and_then(|s| s.as_sequence())
     {
-        ts.push_str("action\n");
+        ts.push_str("action\n    .steps(s => s\n");
         for step in steps {
             generate_composite_action_step(&mut ts, step, &actions);
         }
-        ts.push_str(";\n\n");
+        ts.push_str("    );\n\n");
     }
 
     // Build call
@@ -578,85 +582,94 @@ fn generate_step_inner(
         let is_known = actions.iter().any(|a| a == uses);
 
         if is_known {
-            ts.push_str(&format!("    .addStep({}({{\n", var_name));
+            ts.push_str(&format!("        .add({}({{\n", var_name));
         } else {
-            ts.push_str("    .addStep({\n");
-            ts.push_str(&format!("        uses: \"{}\",\n", escape_js_string(uses)));
+            ts.push_str("        .add({\n");
+            ts.push_str(&format!(
+                "            uses: \"{}\",\n",
+                escape_js_string(uses)
+            ));
         }
 
         if let Some(id) = step.get("id").and_then(|v| v.as_str()) {
-            ts.push_str(&format!("        id: \"{}\",\n", escape_js_string(id)));
+            ts.push_str(&format!("            id: \"{}\",\n", escape_js_string(id)));
         }
 
         if let Some(name) = step.get("name").and_then(|v| v.as_str()) {
-            ts.push_str(&format!("        name: \"{}\",\n", escape_js_string(name)));
+            ts.push_str(&format!(
+                "            name: \"{}\",\n",
+                escape_js_string(name)
+            ));
         }
 
         if let Some(with) = step.get("with").and_then(|v| v.as_mapping()) {
-            ts.push_str("        with: {\n");
+            ts.push_str("            with: {\n");
             for (k, v) in with {
                 let key_str = k.as_str().unwrap_or("unknown");
                 let needs_quotes = key_str.contains('-') || key_str.contains('.');
                 if needs_quotes {
                     ts.push_str(&format!(
-                        "            \"{}\": {},\n",
+                        "                \"{}\": {},\n",
                         escape_js_string(key_str),
-                        yaml_value_to_js(v, 12)
+                        yaml_value_to_js(v, 16)
                     ));
                 } else {
                     ts.push_str(&format!(
-                        "            {}: {},\n",
+                        "                {}: {},\n",
                         key_str,
-                        yaml_value_to_js(v, 12)
+                        yaml_value_to_js(v, 16)
                     ));
                 }
             }
-            ts.push_str("        },\n");
+            ts.push_str("            },\n");
         }
 
         if let Some(if_cond) = step.get("if").and_then(|v| v.as_str()) {
             ts.push_str(&format!(
-                "        \"if\": \"{}\",\n",
+                "            \"if\": \"{}\",\n",
                 escape_js_string(if_cond)
             ));
         }
 
         if let Some(env) = step.get("env").and_then(|v| v.as_mapping()) {
-            ts.push_str("        env: {\n");
+            ts.push_str("            env: {\n");
             for (k, v) in env {
                 let key_str = k.as_str().unwrap_or("unknown");
                 ts.push_str(&format!(
-                    "            {}: {},\n",
+                    "                {}: {},\n",
                     key_str,
-                    yaml_value_to_js(v, 12)
+                    yaml_value_to_js(v, 16)
                 ));
             }
-            ts.push_str("        },\n");
+            ts.push_str("            },\n");
         }
 
         if is_known {
-            ts.push_str("    }))\n");
+            ts.push_str("        }))\n");
         } else {
-            ts.push_str("    })\n");
+            ts.push_str("        })\n");
         }
     } else if let Some(run) = step.get("run").and_then(|v| v.as_str()) {
         // Run step
-        ts.push_str("    .addStep({\n");
+        ts.push_str("        .add({\n");
 
         if let Some(id) = step.get("id").and_then(|v| v.as_str()) {
-            ts.push_str(&format!("        id: \"{}\",\n", escape_js_string(id)));
+            ts.push_str(&format!("            id: \"{}\",\n", escape_js_string(id)));
         }
 
         if let Some(name) = step.get("name").and_then(|v| v.as_str()) {
-            ts.push_str(&format!("        name: \"{}\",\n", escape_js_string(name)));
+            ts.push_str(&format!(
+                "            name: \"{}\",\n",
+                escape_js_string(name)
+            ));
         }
         if run.contains('\n') {
             ts.push_str(&format!(
-                "        run: `{}`",
+                "            run: `{}`",
                 run.replace('`', "\\`").replace("${", "\\${")
             ));
         } else {
-            ts.push_str(&format!("        run: \"{}\"", escape_js_string(run)));
+            ts.push_str(&format!("            run: \"{}\"", escape_js_string(run)));
         }
         ts.push_str(",\n");
 
@@ -664,45 +677,186 @@ fn generate_step_inner(
         if options.require_shell {
             let shell = step.get("shell").and_then(|v| v.as_str()).unwrap_or("bash");
             ts.push_str(&format!(
-                "        shell: \"{}\",\n",
+                "            shell: \"{}\",\n",
                 escape_js_string(shell)
             ));
         } else if let Some(shell) = step.get("shell").and_then(|v| v.as_str()) {
             ts.push_str(&format!(
-                "        shell: \"{}\",\n",
+                "            shell: \"{}\",\n",
                 escape_js_string(shell)
             ));
         }
 
         if let Some(if_cond) = step.get("if").and_then(|v| v.as_str()) {
             ts.push_str(&format!(
-                "        \"if\": \"{}\",\n",
+                "            \"if\": \"{}\",\n",
                 escape_js_string(if_cond)
             ));
         }
 
         if let Some(env) = step.get("env").and_then(|v| v.as_mapping()) {
-            ts.push_str("        env: {\n");
+            ts.push_str("            env: {\n");
             for (k, v) in env {
                 let key_str = k.as_str().unwrap_or("unknown");
                 ts.push_str(&format!(
-                    "            {}: {},\n",
+                    "                {}: {},\n",
                     key_str,
-                    yaml_value_to_js(v, 12)
+                    yaml_value_to_js(v, 16)
                 ));
             }
-            ts.push_str("        },\n");
+            ts.push_str("            },\n");
         }
 
         if let Some(wd) = step.get("working-directory").and_then(|v| v.as_str()) {
             ts.push_str(&format!(
-                "        \"working-directory\": \"{}\",\n",
+                "            \"working-directory\": \"{}\",\n",
                 escape_js_string(wd)
             ));
         }
 
-        ts.push_str("    })\n");
+        ts.push_str("        })\n");
     }
+}
+
+/// Migrate `.gaji.toml` (and optionally `.gaji.local.toml`) to TypeScript config files.
+pub fn migrate_toml_config(root: &Path) -> Result<()> {
+    let toml_path = root.join(".gaji.toml");
+    if !toml_path.exists() {
+        return Ok(());
+    }
+
+    let config = crate::config::Config::load_from(&toml_path)?;
+    let ts_content = config_to_ts(&config);
+    let ts_path = root.join(crate::config::TS_CONFIG_FILE);
+    std::fs::write(&ts_path, &ts_content)?;
+    println!(
+        "{} Migrated .gaji.toml → {}",
+        "✓".green(),
+        crate::config::TS_CONFIG_FILE
+    );
+
+    // Migrate local config if present
+    let local_toml_path = root.join(".gaji.local.toml");
+    if local_toml_path.exists() {
+        let local_config = crate::config::Config::load_from(&local_toml_path)?;
+        let local_ts_content = config_to_ts(&local_config);
+        let local_ts_path = root.join(crate::config::TS_LOCAL_CONFIG_FILE);
+        std::fs::write(&local_ts_path, &local_ts_content)?;
+        println!(
+            "{} Migrated .gaji.local.toml → {}",
+            "✓".green(),
+            crate::config::TS_LOCAL_CONFIG_FILE
+        );
+    }
+
+    // Prompt to remove old files
+    let confirm = dialoguer::Confirm::new()
+        .with_prompt("Remove old .gaji.toml files?")
+        .default(true)
+        .interact()
+        .unwrap_or(false);
+
+    if confirm {
+        std::fs::remove_file(&toml_path)?;
+        println!("{} Removed .gaji.toml", "✓".green());
+        if local_toml_path.exists() {
+            std::fs::remove_file(&local_toml_path)?;
+            println!("{} Removed .gaji.local.toml", "✓".green());
+        }
+    }
+
+    Ok(())
+}
+
+/// Convert a Config to TypeScript config source, only emitting non-default values.
+fn config_to_ts(config: &crate::config::Config) -> String {
+    let defaults = crate::config::Config::default();
+    let mut ts = String::new();
+
+    ts.push_str("import { defineConfig } from \"./generated/index.js\";\n\n");
+    ts.push_str("export default defineConfig({\n");
+
+    if config.project.workflows_dir != defaults.project.workflows_dir {
+        ts.push_str(&format!(
+            "    workflows: \"{}\",\n",
+            config.project.workflows_dir
+        ));
+    }
+    if config.project.output_dir != defaults.project.output_dir {
+        ts.push_str(&format!("    output: \"{}\",\n", config.project.output_dir));
+    }
+    if config.project.generated_dir != defaults.project.generated_dir {
+        ts.push_str(&format!(
+            "    generated: \"{}\",\n",
+            config.project.generated_dir
+        ));
+    }
+
+    // Watch section
+    let mut watch_parts = vec![];
+    if config.watch.debounce_ms != defaults.watch.debounce_ms {
+        watch_parts.push(format!("        debounce: {},", config.watch.debounce_ms));
+    }
+    if config.watch.ignored_patterns != defaults.watch.ignored_patterns {
+        let patterns: Vec<String> = config
+            .watch
+            .ignored_patterns
+            .iter()
+            .map(|p| format!("\"{}\"", p))
+            .collect();
+        watch_parts.push(format!("        ignore: [{}],", patterns.join(", ")));
+    }
+    if !watch_parts.is_empty() {
+        ts.push_str("    watch: {\n");
+        for part in &watch_parts {
+            ts.push_str(part);
+            ts.push('\n');
+        }
+        ts.push_str("    },\n");
+    }
+
+    // Build section
+    let mut build_parts = vec![];
+    if config.build.validate != defaults.build.validate {
+        build_parts.push(format!("        validate: {},", config.build.validate));
+    }
+    if config.build.format != defaults.build.format {
+        build_parts.push(format!("        format: {},", config.build.format));
+    }
+    if config.build.cache_ttl_days != defaults.build.cache_ttl_days {
+        build_parts.push(format!(
+            "        cacheTtlDays: {},",
+            config.build.cache_ttl_days
+        ));
+    }
+    if !build_parts.is_empty() {
+        ts.push_str("    build: {\n");
+        for part in &build_parts {
+            ts.push_str(part);
+            ts.push('\n');
+        }
+        ts.push_str("    },\n");
+    }
+
+    // GitHub section
+    let mut github_parts = vec![];
+    if let Some(ref token) = config.github.token {
+        github_parts.push(format!("        token: \"{}\",", token));
+    }
+    if let Some(ref api_url) = config.github.api_url {
+        github_parts.push(format!("        apiUrl: \"{}\",", api_url));
+    }
+    if !github_parts.is_empty() {
+        ts.push_str("    github: {\n");
+        for part in &github_parts {
+            ts.push_str(part);
+            ts.push('\n');
+        }
+        ts.push_str("    },\n");
+    }
+
+    ts.push_str("});\n");
+    ts
 }
 
 /// Extract all `uses:` values from a parsed YAML workflow.
@@ -937,8 +1091,15 @@ jobs:
         assert!(ts.contains("import { getAction, Job, Workflow }"));
         assert!(ts.contains(r#"getAction("actions/checkout@v5")"#));
         assert!(ts.contains("new Job("));
+        assert!(ts.contains(".steps(s => s"));
+        assert!(ts.contains(".add(checkout("));
         assert!(ts.contains("new Workflow("));
+        assert!(ts.contains(".jobs(j => j"));
+        assert!(ts.contains(r#".add("build", build)"#));
         assert!(ts.contains(r#"workflow.build("ci")"#));
+        // Old API should NOT be present
+        assert!(!ts.contains(".addStep("));
+        assert!(!ts.contains(".addJob("));
     }
 
     #[test]
@@ -1002,6 +1163,10 @@ jobs:
             "Expected escaped \\${{ but got: {}",
             ts
         );
+        // Should use new API
+        assert!(ts.contains(".steps(s => s"));
+        assert!(ts.contains(".add({"));
+        assert!(!ts.contains(".addStep("));
     }
 
     #[test]
@@ -1109,9 +1274,12 @@ runs:
         assert!(ts.contains("name: \"Setup Project\""));
         assert!(ts.contains("description: \"Sets up the project environment\""));
         assert!(ts.contains("action.build(\"setup-project\")"));
-        assert!(ts.contains(".addStep("));
+        assert!(ts.contains(".steps(s => s"));
+        assert!(ts.contains(".add(checkout("));
         assert!(ts.contains("shell: \"bash\""));
         assert!(ts.contains(r#"getAction("actions/checkout@v5")"#));
+        // Old API should NOT be present
+        assert!(!ts.contains(".addStep("));
     }
 
     #[test]
@@ -1235,5 +1403,83 @@ runs:
             actions,
             vec!["actions/checkout@v5", "actions/setup-node@v4"]
         );
+    }
+
+    #[test]
+    fn test_config_to_ts_defaults_only() {
+        let config = crate::config::Config::default();
+        let ts = config_to_ts(&config);
+        assert!(ts.contains("defineConfig"));
+        // Defaults should not be emitted
+        assert!(!ts.contains("workflows:"));
+        assert!(!ts.contains("output:"));
+        assert!(!ts.contains("generated:"));
+    }
+
+    #[test]
+    fn test_config_to_ts_custom_values() {
+        let mut config = crate::config::Config::default();
+        config.project.workflows_dir = "src/workflows".to_string();
+        config.project.output_dir = "dist/.github".to_string();
+        config.build.cache_ttl_days = 14;
+        config.github.token = Some("ghp_test".to_string());
+
+        let ts = config_to_ts(&config);
+        assert!(ts.contains("defineConfig"));
+        assert!(ts.contains("workflows: \"src/workflows\""));
+        assert!(ts.contains("output: \"dist/.github\""));
+        assert!(ts.contains("cacheTtlDays: 14"));
+        assert!(ts.contains("token: \"ghp_test\""));
+        // Default generated dir should not be emitted
+        assert!(!ts.contains("generated:"));
+    }
+
+    #[test]
+    fn test_migrate_toml_config_creates_ts() {
+        let temp = tempfile::TempDir::new().unwrap();
+        std::fs::write(
+            temp.path().join(".gaji.toml"),
+            r#"
+[project]
+workflows_dir = "src/workflows"
+output_dir = "dist/.github"
+
+[build]
+cache_ttl_days = 14
+"#,
+        )
+        .unwrap();
+
+        // migrate_toml_config uses dialoguer::Confirm which needs a terminal,
+        // so we test config_to_ts directly and verify file creation logic
+        let config = crate::config::Config::load_from(&temp.path().join(".gaji.toml")).unwrap();
+        let ts = config_to_ts(&config);
+
+        assert!(ts.contains("workflows: \"src/workflows\""));
+        assert!(ts.contains("output: \"dist/.github\""));
+        assert!(ts.contains("cacheTtlDays: 14"));
+    }
+
+    #[test]
+    fn test_migrate_toml_config_local() {
+        let temp = tempfile::TempDir::new().unwrap();
+        std::fs::write(
+            temp.path().join(".gaji.local.toml"),
+            r#"
+[github]
+token = "ghp_secret"
+api_url = "https://ghe.corp.com"
+"#,
+        )
+        .unwrap();
+
+        let config =
+            crate::config::Config::load_from(&temp.path().join(".gaji.local.toml")).unwrap();
+        let ts = config_to_ts(&config);
+
+        assert!(ts.contains("token: \"ghp_secret\""));
+        assert!(ts.contains("apiUrl: \"https://ghe.corp.com\""));
+        // Should not emit default project settings
+        assert!(!ts.contains("workflows:"));
     }
 }

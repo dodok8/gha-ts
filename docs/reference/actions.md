@@ -26,12 +26,14 @@ const setupNode = getAction("actions/setup-node@v4");
 
 // Use in workflow
 const job = new Job("ubuntu-latest")
-  .addStep(checkout({}))
-  .addStep(setupNode({
-    with: {
-      "node-version": "20",  // ✅ Type-safe!
-    },
-  }));
+  .steps(s => s
+    .add(checkout({}))
+    .add(setupNode({
+      with: {
+        "node-version": "20",  // ✅ Type-safe!
+      },
+    }))
+  );
 ```
 
 ## Action Reference Format
@@ -120,10 +122,10 @@ gaji add actions/checkout@v5
 const checkout = getAction("actions/checkout@v5");
 
 // Basic usage
-.addStep(checkout({}))
+.add(checkout({}))
 
 // With options
-.addStep(checkout({
+.add(checkout({
   with: {
     repository: "owner/repo",
     ref: "main",
@@ -144,7 +146,7 @@ gaji add actions/setup-node@v4
 ```typescript
 const setupNode = getAction("actions/setup-node@v4");
 
-.addStep(setupNode({
+.add(setupNode({
   with: {
     "node-version": "20",
     cache: "npm",
@@ -163,7 +165,7 @@ gaji add actions/cache@v4
 ```typescript
 const cache = getAction("actions/cache@v4");
 
-.addStep(cache({
+.add(cache({
   with: {
     path: "node_modules",
     key: "${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}",
@@ -183,7 +185,7 @@ gaji add actions/upload-artifact@v4
 ```typescript
 const uploadArtifact = getAction("actions/upload-artifact@v4");
 
-.addStep(uploadArtifact({
+.add(uploadArtifact({
   with: {
     name: "build-output",
     path: "dist/",
@@ -202,7 +204,7 @@ gaji add actions/download-artifact@v4
 ```typescript
 const downloadArtifact = getAction("actions/download-artifact@v4");
 
-.addStep(downloadArtifact({
+.add(downloadArtifact({
   with: {
     name: "build-output",
     path: "dist/",
@@ -233,15 +235,17 @@ const setupBuildx = getAction("docker/setup-buildx-action@v3");
 const buildPush = getAction("docker/build-push-action@v5");
 
 const job = new Job("ubuntu-latest")
-  .addStep(checkout({}))
-  .addStep(setupBuildx({}))
-  .addStep(buildPush({
-    with: {
-      context: ".",
-      push: true,
-      tags: "user/app:latest",
-    },
-  }));
+  .steps(s => s
+    .add(checkout({}))
+    .add(setupBuildx({}))
+    .add(buildPush({
+      with: {
+        context: ".",
+        push: true,
+        tags: "user/app:latest",
+      },
+    }))
+  );
 ```
 
 ## Local Actions
@@ -251,7 +255,7 @@ Reference local composite actions:
 ```typescript
 const myAction = getAction("./my-action");
 
-.addStep(myAction({
+.add(myAction({
   with: {
     input: "value",
   },

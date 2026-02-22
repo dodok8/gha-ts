@@ -629,4 +629,35 @@ export default defineConfig({});
         assert_eq!(config.watch.debounce_ms, 300);
         assert!(config.build.validate);
     }
+
+    #[test]
+    fn test_load_from_ts_env_var_precedence() {
+        let dir = tempfile::tempdir().unwrap();
+        let config_path = dir.path().join("gaji.config.ts");
+        std::fs::write(
+            &config_path,
+            r#"
+export default defineConfig({
+    github: {
+        token: "ts_config_token",
+    },
+});
+"#,
+        )
+        .unwrap();
+
+        let config = Config::load_from_ts(&config_path).unwrap();
+        assert_eq!(config.github.token, Some("ts_config_token".to_string()));
+
+        // Set env var — should take precedence via resolve_token()
+        std::env::set_var("GITHUB_TOKEN", "env_override_token");
+        assert_eq!(
+            config.resolve_token(),
+            Some("env_override_token".to_string())
+        );
+        std::env::remove_var("GITHUB_TOKEN");
+
+        // Without env var, falls back to TS config value
+        assert_eq!(config.resolve_token(), Some("ts_config_token".to_string()));
+    }
 }

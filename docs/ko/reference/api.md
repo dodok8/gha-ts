@@ -9,9 +9,9 @@ gaji의 TypeScript API에 대한 레퍼런스입니다.
 GitHub Actions 워크플로우를 표현합니다.
 
 ```typescript
-class Workflow {
+class Workflow<Cx = {}> {
   constructor(config: WorkflowConfig)
-  addJob(id: string, job: Job<any> | WorkflowCall): this
+  jobs<NewCx>(callback: (j: JobBuilder<{}>) => JobBuilder<NewCx>): Workflow<NewCx>
   static fromObject(def: WorkflowDefinition, id?: string): Workflow
   build(filename?: string): void
   toJSON(): WorkflowDefinition
@@ -20,7 +20,7 @@ class Workflow {
 
 | 메서드 | 설명 |
 |--------|------|
-| `addJob(id, job)` | 워크플로우에 job을 추가합니다. `Job`, `WorkflowCall`을 받습니다. |
+| `jobs(callback)` | `JobBuilder` 콜백을 통해 워크플로우 job을 정의합니다. 콜백은 빈 `JobBuilder`를 받아 `.add()`로 job을 추가한 뒤 반환합니다. |
 | `fromObject(def, id?)` | `WorkflowDefinition` 객체로부터 Workflow를 생성합니다. 기존 YAML 형태의 정의를 래핑할 때 유용합니다. |
 | `build(filename?)` | 워크플로우를 YAML로 컴파일합니다. |
 | `toJSON()` | `WorkflowDefinition` 객체로 직렬화합니다. |
@@ -29,11 +29,12 @@ class Workflow {
 
 ```typescript
 interface WorkflowConfig {
-  name: string
-  on: WorkflowTriggers
+  name?: string
+  on: WorkflowOn
   env?: Record<string, string>
-  permissions?: WorkflowPermissions
-  concurrency?: WorkflowConcurrency
+  permissions?: Permissions
+  concurrency?: { group: string; 'cancel-in-progress'?: boolean } | string
+  defaults?: { run?: { shell?: string; 'working-directory'?: string } }
 }
 ```
 
@@ -50,8 +51,10 @@ const workflow = new Workflow({
     NODE_ENV: "production",
   },
 })
-  .addJob("test", testJob)
-  .addJob("build", buildJob);
+  .jobs(j => j
+    .add("test", testJob)
+    .add("build", buildJob)
+  );
 
 workflow.build("ci");
 ```
@@ -77,69 +80,156 @@ workflow.build("raw");
 
 ### `Job`
 
-워크플로우의 작업을 나타냅니다. 타입 파라미터 `O`는 `jobOutputs()`를 통한 타입 안전한 job 간 참조를 위해 출력 키를 추적합니다.
+워크플로우의 작업을 나타냅니다. 두 개의 타입 파라미터를 가집니다: `Cx`는 `.steps()`에서 누적된 스텝 출력 컨텍스트를, `O`는 `.outputs()`에서 선언된 출력 키를 추적합니다.
 
 ```typescript
-class Job<O extends Record<string, string> = {}> {
-  constructor(runsOn: string | string[], options?: Partial<JobDefinition>)
-  addStep(step: Step): this
-  needs(jobs: string | string[]): this
-  env(variables: Record<string, string>): this
-  when(condition: string): this
-  permissions(perms: Permissions): this
-  outputs<T extends Record<string, string>>(outputs: T): Job<T>
-  strategy(strategy: JobStrategy): this
-  continueOnError(v: boolean): this
-  timeoutMinutes(m: number): this
+class Job<Cx = {}, O extends Record<string, string> = {}> {
+  constructor(runsOn: string | string[], config?: JobConfig)
+  steps<NewCx>(callback: (s: StepBuilder<{}>) => StepBuilder<NewCx>): Job<NewCx, O>
+  outputs<T extends Record<string, string>>(outputs: T | ((output: Cx) => T)): Job<Cx, T>
   toJSON(): JobDefinition
 }
 ```
 
 | 메서드 | 설명 |
 |--------|------|
-| `addStep(step)` | job에 스텝을 추가합니다. |
-| `needs(jobs)` | job 의존성을 설정합니다. |
-| `env(variables)` | 환경 변수를 설정합니다. |
-| `when(condition)` | job의 `if` 조건을 설정합니다 (예: `"github.ref == 'refs/heads/main'"`). |
-| `permissions(perms)` | job 수준의 권한을 설정합니다 (예: `{ contents: 'read' }`). |
-| `outputs(outputs)` | job 출력을 정의합니다. 출력 키를 캡처한 `Job<T>`를 반환합니다. |
-| `strategy(strategy)` | 매트릭스 전략을 설정합니다. |
-| `continueOnError(v)` | `continue-on-error` 플래그를 설정합니다. |
-| `timeoutMinutes(m)` | `timeout-minutes` 값을 설정합니다. |
+| `steps(callback)` | `StepBuilder` 콜백을 통해 스텝을 정의합니다. 콜백은 빈 `StepBuilder`를 받아 `.add()`로 스텝을 추가한 뒤 반환합니다. |
+| `outputs(outputs)` | job 출력을 정의합니다. 일반 객체 또는 스텝 출력 컨텍스트(`Cx`)를 받는 콜백을 받습니다. |
 | `toJSON()` | `JobDefinition` 객체로 직렬화합니다. |
 
-생성자의 `options` 파라미터로 모든 옵션을 한번에 설정할 수 있습니다:
+#### `JobConfig`
+
+모든 job 설정은 생성자의 `config` 파라미터로 전달합니다:
 
 ```typescript
-const job = new Job("ubuntu-latest", {
-  needs: ["test"],
-  env: { NODE_ENV: "production" },
-  "timeout-minutes": 30,
-});
+interface JobConfig {
+  permissions?: Permissions
+  needs?: string[]
+  strategy?: { matrix?: Record<string, unknown>; 'fail-fast'?: boolean; 'max-parallel'?: number }
+  if?: string
+  environment?: string | { name: string; url?: string }
+  concurrency?: { group: string; 'cancel-in-progress'?: boolean } | string
+  'timeout-minutes'?: number
+  env?: Record<string, string>
+  defaults?: { run?: { shell?: string; 'working-directory'?: string } }
+  services?: Record<string, Service>
+  container?: Container
+  'continue-on-error'?: boolean
+}
 ```
 
 #### 예제
 
 ```typescript
-const job = new Job("ubuntu-latest")
-  .needs(["test"])
-  .env({
-    NODE_ENV: "production",
-  })
-  .when("github.event_name == 'push'")
-  .permissions({ contents: "read" })
-  .strategy({
+const checkout = getAction("actions/checkout@v5");
+
+const job = new Job("ubuntu-latest", {
+  needs: ["test"],
+  env: { NODE_ENV: "production" },
+  if: "github.event_name == 'push'",
+  permissions: { contents: "read" },
+  strategy: {
     matrix: {
       node: ["18", "20", "22"],
     },
-  })
+  },
+  "continue-on-error": false,
+  "timeout-minutes": 30,
+})
+  .steps(s => s
+    .add(checkout({}))
+    .add({ run: "npm test" })
+  )
   .outputs({
     version: "${{ steps.version.outputs.value }}",
-  })
-  .continueOnError(false)
-  .timeoutMinutes(30)
-  .addStep(checkout({}))
-  .addStep({ run: "npm test" });
+  });
+```
+
+---
+
+### `StepBuilder`
+
+`.steps()` 콜백 내에서 스텝을 누적합니다. `.add()` 호출마다 스텝을 추가하고, `id`와 타입이 지정된 출력이 있는 스텝의 경우 출력 컨텍스트 `Cx`를 갱신합니다.
+
+```typescript
+class StepBuilder<Cx = {}> {
+  add<Id extends string, StepO>(step: ActionStep<StepO, Id>): StepBuilder<Cx & Record<Id, StepO>>
+  add(step: JobStep): StepBuilder<Cx>
+  add<Id extends string, StepO>(stepFn: (output: Cx) => ActionStep<StepO, Id>): StepBuilder<Cx & Record<Id, StepO>>
+  add(stepFn: (output: Cx) => JobStep): StepBuilder<Cx>
+}
+```
+
+네 가지 오버로드:
+
+| 오버로드 | 설명 |
+|----------|------|
+| `add(actionStep)` | 타입이 지정된 출력이 있는 `ActionStep`을 추가합니다 (`getAction()`에 `id`를 전달하여 반환). `Cx`에 출력을 병합합니다. |
+| `add(jobStep)` | 일반 `JobStep`을 추가합니다 (run 명령 또는 `id` 없는 액션). `Cx` 변경 없음. |
+| `add(output => actionStep)` | 콜백 형태 — 이전 스텝 출력(`Cx`)을 받아 `ActionStep`을 반환합니다. |
+| `add(output => jobStep)` | 콜백 형태 — 이전 스텝 출력(`Cx`)을 받아 `JobStep`을 반환합니다. |
+
+#### 예제
+
+```typescript
+const checkout = getAction("actions/checkout@v5");
+
+new Job("ubuntu-latest")
+  .steps(s => s
+    .add(checkout({ id: "co" }))
+    .add(output => ({
+      name: "Use ref",
+      run: "echo " + output.co.ref,  // "${{ steps.co.outputs.ref }}"
+    }))
+  );
+```
+
+---
+
+### `JobBuilder`
+
+`.jobs()` 콜백 내에서 job을 누적합니다. `.add()` 호출마다 job을 등록하고, 출력이 선언된 job의 경우 출력 컨텍스트 `Cx`를 갱신합니다.
+
+```typescript
+class JobBuilder<Cx = {}> {
+  add<Id extends string, O extends Record<string, string>>(
+    id: Id, job: Job<any, O>
+  ): JobBuilder<Cx & Record<Id, O>>
+  add(id: string, job: Job | WorkflowCall): JobBuilder<Cx>
+  add<Id extends string, O extends Record<string, string>>(
+    id: Id, jobFn: (output: Cx) => Job<any, O>
+  ): JobBuilder<Cx & Record<Id, O>>
+  add(id: string, jobFn: (output: Cx) => Job | WorkflowCall): JobBuilder<Cx>
+}
+```
+
+네 가지 오버로드:
+
+| 오버로드 | 설명 |
+|----------|------|
+| `add(id, job)` | 출력이 있는 `Job`을 추가합니다. `Cx`에 출력을 병합합니다. |
+| `add(id, job)` | 출력 추적 없이 `Job` 또는 `WorkflowCall`을 추가합니다. |
+| `add(id, output => job)` | 콜백 형태 — 이전 job 출력(`Cx`)을 받아 `Job`을 반환합니다. |
+| `add(id, output => job)` | 콜백 형태 — 이전 job 출력(`Cx`)을 받아 `Job` 또는 `WorkflowCall`을 반환합니다. |
+
+#### 예제
+
+```typescript
+new Workflow({ name: "CI", on: { push: {} } })
+  .jobs(j => j
+    .add("build",
+      new Job("ubuntu-latest")
+        .steps(s => s.add(checkout({ id: "co" })))
+        .outputs(output => ({ ref: output.co.ref }))
+    )
+    .add("deploy", output =>
+      new Job("ubuntu-latest", { needs: ["build"] })
+        .steps(s => s
+          .add({ run: "echo " + output.build.ref })
+        )
+    )
+  )
+  .build("ci");
 ```
 
 ---
@@ -149,33 +239,32 @@ const job = new Job("ubuntu-latest")
 재사용 가능한 [컴포지트 액션](https://docs.github.com/en/actions/sharing-automations/creating-actions/creating-a-composite-action)을 만듭니다.
 
 ```typescript
-class Action {
-  constructor(config: ActionConfig)
-  addStep(step: Step): this
+class Action<Cx = {}> {
+  constructor(config: { name: string; description: string; inputs?: Record<string, unknown>; outputs?: Record<string, unknown> })
+  steps<NewCx>(callback: (s: StepBuilder<{}>) => StepBuilder<NewCx>): Action<NewCx>
+  outputMapping<T extends Record<string, string>>(mapping: (output: Cx) => T): Action<Cx>
   build(filename: string): void
+  toJSON(): object
 }
 ```
 
-#### `ActionConfig`
-
-```typescript
-interface ActionConfig {
-  name: string
-  description: string
-  inputs?: Record<string, ActionInput>
-  outputs?: Record<string, ActionOutput>
-}
-```
+| 메서드 | 설명 |
+|--------|------|
+| `steps(callback)` | `StepBuilder` 콜백을 통해 액션 스텝을 정의합니다. |
+| `outputMapping(fn)` | 스텝 출력을 액션 출력에 매핑합니다. |
+| `build(filename)` | 액션을 `action.yml`로 컴파일합니다. |
 
 #### 예제
 
 ```ts twoslash
-// @noErrors
 // @filename: workflows/example.ts
 // ---cut---
-import { Action } from "../generated/index.js";
+import { Action, getAction } from "../generated/index.js";
 
-const setupEnv = new Action({
+const checkout = getAction("actions/checkout@v5");
+const setupNode = getAction("actions/setup-node@v4");
+
+new Action({
   name: "Setup Environment",
   description: "Setup Node.js and install dependencies",
   inputs: {
@@ -186,17 +275,16 @@ const setupEnv = new Action({
     },
   },
 })
-  .addStep(checkout({}))
-  .addStep(setupNode({
-    with: {
-      "node-version": "${{ inputs.node-version }}",
-    },
-  }))
-  .addStep({
-    run: "npm ci",
-  });
-
-setupEnv.build("setup-env");
+  .steps(s => s
+    .add(checkout({}))
+    .add(setupNode({
+      with: {
+        "node-version": "${{ inputs.node-version }}",
+      },
+    }))
+    .add({ run: "npm ci" })
+  )
+  .build("setup-env");
 ```
 
 생성된 `action.yml`은 다음과 같이 사용할 수 있습니다:
@@ -205,12 +293,12 @@ setupEnv.build("setup-env");
 // 다른 워크플로우에서
 const setupEnv = getAction("./setup-env");
 
-const job = new Job("ubuntu-latest")
-  .addStep(setupEnv({
-    with: {
-      "node-version": "20",
-    },
-  }));
+new Job("ubuntu-latest")
+  .steps(s => s
+    .add(setupEnv({
+      with: { "node-version": "20" },
+    }))
+  );
 ```
 
 ---
@@ -381,34 +469,40 @@ TypeScript 클래스 상속을 통해 재사용 가능한 작업 템플릿을 �
 #### 예제
 
 ```ts twoslash
-// @noErrors
 // @filename: workflows/example.ts
 // ---cut---
-import { Job } from "../generated/index.js";
+import { Job, getAction, Workflow } from "../generated/index.js";
+
+const checkout = getAction("actions/checkout@v5");
+const setupNode = getAction("actions/setup-node@v4");
 
 // 재사용 가능한 작업 템플릿 정의
 class NodeTestJob extends Job {
   constructor(nodeVersion: string) {
     super("ubuntu-latest");
 
-    this
-      .addStep(checkout({}))
-      .addStep(setupNode({
+    this.steps(s => s
+      .add(checkout({}))
+      .add(setupNode({
         with: { "node-version": nodeVersion },
       }))
-      .addStep({ run: "npm ci" })
-      .addStep({ run: "npm test" });
+      .add({ run: "npm ci" })
+      .add({ run: "npm test" })
+    );
   }
 }
 
 // 워크플로우에서 사용
-const workflow = new Workflow({
+new Workflow({
   name: "Test Matrix",
   on: { push: { branches: ["main"] } },
 })
-  .addJob("test-node-18", new NodeTestJob("18"))
-  .addJob("test-node-20", new NodeTestJob("20"))
-  .addJob("test-node-22", new NodeTestJob("22"));
+  .jobs(j => j
+    .add("test-node-18", new NodeTestJob("18"))
+    .add("test-node-20", new NodeTestJob("20"))
+    .add("test-node-22", new NodeTestJob("22"))
+  )
+  .build("test-matrix");
 ```
 
 더 복잡한 재사용 가능한 작업도 만들 수 있습니다:
@@ -416,34 +510,39 @@ const workflow = new Workflow({
 ```typescript
 class DeployJob extends Job {
   constructor(environment: "staging" | "production") {
-    super("ubuntu-latest");
-
-    this
-      .env({
+    super("ubuntu-latest", {
+      env: {
         ENVIRONMENT: environment,
         API_URL: environment === "production"
           ? "https://api.example.com"
           : "https://staging.api.example.com",
-      })
-      .addStep(checkout({}))
-      .addStep(setupNode({ with: { "node-version": "20" } }))
-      .addStep({
+      },
+    });
+
+    this.steps(s => s
+      .add(checkout({}))
+      .add(setupNode({ with: { "node-version": "20" } }))
+      .add({
         name: "Deploy",
         run: `npm run deploy:${environment}`,
         env: {
           DEPLOY_TOKEN: "${{ secrets.DEPLOY_TOKEN }}",
         },
-      });
+      })
+    );
   }
 }
 
 // 워크플로우에서 사용
-const workflow = new Workflow({
+new Workflow({
   name: "Deploy",
   on: { push: { tags: ["v*"] } },
 })
-  .addJob("deploy-staging", new DeployJob("staging"))
-  .addJob("deploy-production", new DeployJob("production").needs(["deploy-staging"]));
+  .jobs(j => j
+    .add("deploy-staging", new DeployJob("staging"))
+    .add("deploy-production", new DeployJob("production"))
+  )
+  .build("deploy");
 ```
 
 ---
@@ -454,23 +553,18 @@ const workflow = new Workflow({
 
 ```typescript
 class WorkflowCall {
-  constructor(uses: string)
-  with(inputs: Record<string, unknown>): this
-  secrets(s: Record<string, unknown> | 'inherit'): this
-  needs(deps: string | string[]): this
-  when(condition: string): this
-  permissions(perms: Permissions): this
+  constructor(uses: string, config?: {
+    with?: Record<string, unknown>
+    secrets?: Record<string, unknown> | 'inherit'
+    needs?: string[]
+    if?: string
+    permissions?: Permissions
+  })
   toJSON(): object
 }
 ```
 
-| 메서드 | 설명 |
-|--------|------|
-| `with(inputs)` | 재사용 워크플로우에 입력값을 전달합니다. |
-| `secrets(s)` | 시크릿을 명시적으로 전달하거나, `'inherit'`로 모든 시크릿을 전달합니다. |
-| `needs(deps)` | job 의존성을 설정합니다. |
-| `when(condition)` | job의 `if` 조건을 설정합니다. |
-| `permissions(perms)` | job 수준의 권한을 설정합니다. |
+모든 옵션은 생성자의 `config` 파라미터로 전달합니다.
 
 #### 예제
 
@@ -479,18 +573,23 @@ class WorkflowCall {
 // ---cut---
 import { WorkflowCall, Workflow } from "../generated/index.js";
 
-const deploy = new WorkflowCall("octo-org/deploy/.github/workflows/deploy.yml@main")
-  .with({ environment: "production" })
-  .secrets("inherit")
-  .needs(["build"]);
+const deploy = new WorkflowCall(
+  "octo-org/deploy/.github/workflows/deploy.yml@main",
+  {
+    with: { environment: "production" },
+    secrets: "inherit",
+    needs: ["build"],
+  },
+);
 
-const workflow = new Workflow({
+new Workflow({
   name: "Release",
   on: { push: { tags: ["v*"] } },
 })
-  .addJob("deploy", deploy);
-
-workflow.build("release");
+  .jobs(j => j
+    .add("deploy", deploy)
+  )
+  .build("release");
 ```
 
 생성되는 YAML:
@@ -537,11 +636,13 @@ const setupEnv = new Action({
 });
 setupEnv.build("setup-env");
 
-const job = new Job("ubuntu-latest")
-  .addStep({
-    ...ActionRef.from(setupEnv).toJSON(),
-    with: { "node-version": "20" },
-  });
+new Job("ubuntu-latest")
+  .steps(s => s
+    .add({
+      ...ActionRef.from(setupEnv).toJSON(),
+      with: { "node-version": "20" },
+    })
+  );
 ```
 
 ---
@@ -577,7 +678,6 @@ function getAction<T extends string>(ref: T): {
 
 ```typescript
 const checkout = getAction("actions/checkout@v5");
-const setupNode = getAction("actions/setup-node@v4");
 
 // 완전한 타입 안전성으로 사용
 const step = checkout({
@@ -593,7 +693,7 @@ const checkoutStep = checkout({ id: "my-checkout" });
 // checkoutStep.outputs.ref → "${{ steps.my-checkout.outputs.ref }}"
 ```
 
-`jobOutputs()`를 활용한 전체 typed outputs 예제는 [워크플로우 작성의 출력 섹션](../guide/writing-workflows.md#출력)을 참조하세요.
+전체 typed outputs 예제는 [워크플로우 작성의 출력 섹션](../guide/writing-workflows.md#출력)을 참조하세요.
 
 ---
 
@@ -601,10 +701,12 @@ const checkoutStep = checkout({ id: "my-checkout" });
 
 다운스트림 job에서 사용할 타입이 지정된 job 출력 참조를 생성합니다. `Job` 객체의 `.outputs()` 호출에서 출력 키를 읽어 <code v-pre>${{ needs.&lt;jobId&gt;.outputs.&lt;key&gt; }}</code> 표현식을 생성합니다.
 
+이 함수는 호환성 헬퍼입니다. 기본 패턴은 `.jobs()` 콜백을 사용하는 것이며, 여기서 job 출력 컨텍스트가 자동으로 전달됩니다.
+
 ```typescript
 function jobOutputs<O extends Record<string, string>>(
   jobId: string,
-  job: Job<O>,
+  job: Job<any, O>,
 ): JobOutputs<O>
 ```
 
@@ -617,6 +719,54 @@ const buildOutputs = jobOutputs("build", build);
 ```
 
 전체 예제는 [워크플로우 작성의 출력 섹션](../guide/writing-workflows.md#출력)을 참조하세요.
+
+---
+
+### `defineConfig()`
+
+`gaji.config.ts`용 타입 안전한 설정 헬퍼입니다.
+
+```typescript
+function defineConfig(config: GajiConfig): GajiConfig
+```
+
+#### `GajiConfig`
+
+```typescript
+interface GajiConfig {
+  workflows?: string        // 기본값: "workflows"
+  output?: string           // 기본값: ".github"
+  generated?: string        // 기본값: "generated"
+  watch?: {
+    debounce?: number       // 기본값: 300 (ms)
+    ignore?: string[]       // 기본값: ["node_modules", ".git", "generated"]
+  }
+  build?: {
+    validate?: boolean      // 기본값: true
+    format?: boolean        // 기본값: true
+    cacheTtlDays?: number   // 기본값: 30
+  }
+  github?: {
+    token?: string
+    apiUrl?: string         // GitHub Enterprise용
+  }
+}
+```
+
+#### 예제
+
+```typescript
+// gaji.config.ts
+import { defineConfig } from "./generated/index.js";
+
+export default defineConfig({
+  workflows: "workflows",
+  output: ".github",
+  build: {
+    cacheTtlDays: 14,
+  },
+});
+```
 
 ---
 
@@ -647,8 +797,9 @@ interface JobStep {
 `id`를 제공했을 때 `getAction()`이 반환하는 스텝입니다. `JobStep`을 확장하여 타입이 지정된 출력 접근을 제공합니다.
 
 ```typescript
-interface ActionStep<O = {}> extends JobStep {
+interface ActionStep<O = {}, Id extends string = string> extends JobStep {
   readonly outputs: O
+  readonly id: Id
 }
 ```
 
@@ -748,36 +899,42 @@ interface ActionOutput {
 
 ### 완전한 워크플로우
 
-```typescript
+```ts twoslash
+// @filename: workflows/example.ts
+// ---cut---
 import { getAction, Job, Workflow } from "../generated/index.js";
 
 const checkout = getAction("actions/checkout@v5");
 const setupNode = getAction("actions/setup-node@v4");
 
-const test = new Job("ubuntu-latest")
-  .addStep(checkout({}))
-  .addStep(setupNode({ with: { "node-version": "20" } }))
-  .addStep({ run: "npm ci" })
-  .addStep({ run: "npm test" });
-
-const build = new Job("ubuntu-latest")
-  .needs(["test"])
-  .addStep(checkout({}))
-  .addStep(setupNode({ with: { "node-version": "20" } }))
-  .addStep({ run: "npm ci" })
-  .addStep({ run: "npm run build" });
-
-const workflow = new Workflow({
+new Workflow({
   name: "CI",
   on: {
     push: { branches: ["main"] },
     pull_request: { branches: ["main"] },
   },
 })
-  .addJob("test", test)
-  .addJob("build", build);
-
-workflow.build("ci");
+  .jobs(j => j
+    .add("test",
+      new Job("ubuntu-latest")
+        .steps(s => s
+          .add(checkout({}))
+          .add(setupNode({ with: { "node-version": "20" } }))
+          .add({ run: "npm ci" })
+          .add({ run: "npm test" })
+        )
+    )
+    .add("build",
+      new Job("ubuntu-latest", { needs: ["test"] })
+        .steps(s => s
+          .add(checkout({}))
+          .add(setupNode({ with: { "node-version": "20" } }))
+          .add({ run: "npm ci" })
+          .add({ run: "npm run build" })
+        )
+    )
+  )
+  .build("ci");
 ```
 
 ## 다음 단계

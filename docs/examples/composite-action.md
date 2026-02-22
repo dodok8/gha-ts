@@ -41,22 +41,24 @@ const setupEnv = new Action({
     },
   },
 })
-  .addStep(checkout({
-    name: "Checkout code",
-  }))
-  .addStep(setupNode({
-    id: "setup-node",
-    name: "Setup Node.js",
-    with: {
-      "node-version": "${{ inputs.node-version }}",
-      cache: "npm",
-      "cache-dependency-path": "${{ inputs.cache-dependency-path }}",
-    },
-  }))
-  .addStep({
-    name: "Install dependencies",
-    run: "npm ci",
-  });
+  .steps(s => s
+    .add(checkout({
+      name: "Checkout code",
+    }))
+    .add(setupNode({
+      id: "setup-node",
+      name: "Setup Node.js",
+      with: {
+        "node-version": "${{ inputs.node-version }}",
+        cache: "npm",
+        "cache-dependency-path": "${{ inputs.cache-dependency-path }}",
+      },
+    }))
+    .add({
+      name: "Install dependencies",
+      run: "npm ci",
+    })
+  );
 
 setupEnv.build("setup-env");
 ```
@@ -82,21 +84,25 @@ import { getAction, Job, Workflow } from "../../generated/index.js";
 const setupEnv = getAction("./actions/setup-env");
 
 const test = new Job("ubuntu-latest")
-  .addStep(setupEnv({
-    name: "Setup environment",
-    with: {
-      "node-version": "20",
-    },
-  }))
-  .addStep({
-    name: "Run tests",
-    run: "npm test",
-  });
+  .steps(s => s
+    .add(setupEnv({
+      name: "Setup environment",
+      with: {
+        "node-version": "20",
+      },
+    }))
+    .add({
+      name: "Run tests",
+      run: "npm test",
+    })
+  );
 
 const workflow = new Workflow({
   name: "CI",
   on: { push: { branches: ["main"] } },
-}).addJob("test", test);
+}).jobs(j => j
+    .add("test", test)
+  );
 
 workflow.build("ci");
 ```
@@ -120,25 +126,26 @@ class NodeTestJob extends Job {
   constructor(nodeVersion: string) {
     super("ubuntu-latest");
 
-    this
-      .addStep(checkout({
+    this.steps(s => s
+      .add(checkout({
         name: "Checkout code",
       }))
-      .addStep(setupNode({
+      .add(setupNode({
         name: `Setup Node.js ${nodeVersion}`,
         with: {
           "node-version": nodeVersion,
           cache: "npm",
         },
       }))
-      .addStep({
+      .add({
         name: "Install dependencies",
         run: "npm ci",
       })
-      .addStep({
+      .add({
         name: "Run tests",
         run: "npm test",
-      });
+      })
+    );
   }
 }
 
@@ -146,10 +153,11 @@ class NodeTestJob extends Job {
 const workflow = new Workflow({
   name: "Test Matrix",
   on: { push: { branches: ["main"] } },
-})
-  .addJob("test-node-18", new NodeTestJob("18"))
-  .addJob("test-node-20", new NodeTestJob("20"))
-  .addJob("test-node-22", new NodeTestJob("22"));
+}).jobs(j => j
+    .add("test-node-18", new NodeTestJob("18"))
+    .add("test-node-20", new NodeTestJob("20"))
+    .add("test-node-22", new NodeTestJob("22"))
+  );
 
 workflow.build("test-matrix");
 ```
@@ -167,44 +175,48 @@ const setupNode = getAction("actions/setup-node@v4");
 class DeployJob extends Job {
   constructor(
     environment: "staging" | "production",
-    region: string = "us-east-1"
+    region: string = "us-east-1",
+    config: Record<string, unknown> = {}
   ) {
-    super("ubuntu-latest");
-
-    this
-      .env({
+    super("ubuntu-latest", {
+      env: {
         ENVIRONMENT: environment,
         REGION: region,
         API_URL: environment === "production"
           ? "https://api.example.com"
           : "https://staging.api.example.com",
-      })
-      .addStep(checkout({
+      },
+      ...config,
+    });
+
+    this.steps(s => s
+      .add(checkout({
         name: "Checkout code",
       }))
-      .addStep(setupNode({
+      .add(setupNode({
         name: "Setup Node.js",
         with: {
           "node-version": "20",
           cache: "npm",
         },
       }))
-      .addStep({
+      .add({
         name: "Install dependencies",
         run: "npm ci",
       })
-      .addStep({
+      .add({
         name: "Build",
         run: `npm run build:${environment}`,
       })
-      .addStep({
+      .add({
         name: `Deploy to ${environment}`,
         run: `npm run deploy`,
         env: {
           DEPLOY_TOKEN: "${{ secrets.DEPLOY_TOKEN }}",
           AWS_REGION: region,
         },
-      });
+      })
+    );
   }
 }
 
@@ -216,12 +228,14 @@ const workflow = new Workflow({
       tags: ["v*"],
     },
   },
-})
-  .addJob("deploy-staging-us", new DeployJob("staging", "us-east-1"))
-  .addJob("deploy-staging-eu", new DeployJob("staging", "eu-west-1"))
-  .addJob("deploy-production",
-    new DeployJob("production", "us-east-1")
-      .needs(["deploy-staging-us", "deploy-staging-eu"])
+}).jobs(j => j
+    .add("deploy-staging-us", new DeployJob("staging", "us-east-1"))
+    .add("deploy-staging-eu", new DeployJob("staging", "eu-west-1"))
+    .add("deploy-production",
+      new DeployJob("production", "us-east-1", {
+        needs: ["deploy-staging-us", "deploy-staging-eu"],
+      })
+    )
   );
 
 workflow.build("deploy");
@@ -250,63 +264,67 @@ class TestSuiteJob extends Job {
   constructor(options: TestOptions) {
     super("ubuntu-latest");
 
-    // Setup
-    this
-      .addStep(checkout({}))
-      .addStep(setupNode({
-        with: {
-          "node-version": options.nodeVersion,
-          cache: "npm",
-        },
-      }))
-      .addStep({ run: "npm ci" });
+    this.steps(s => {
+      // Setup
+      s = s
+        .add(checkout({}))
+        .add(setupNode({
+          with: {
+            "node-version": options.nodeVersion,
+            cache: "npm",
+          },
+        }))
+        .add({ run: "npm ci" });
 
-    // Lint
-    this.addStep({
-      name: "Run linter",
-      run: "npm run lint",
-    });
-
-    // Tests
-    if (options.coverage) {
-      this.addStep({
-        name: "Run tests with coverage",
-        run: "npm run test:coverage",
+      // Lint
+      s = s.add({
+        name: "Run linter",
+        run: "npm run lint",
       });
 
-      this.addStep(uploadCodecov({
-        name: "Upload coverage",
-        with: {
-          files: "./coverage/lcov.info",
-        },
-      }));
-    } else {
-      this.addStep({
-        name: "Run tests",
-        run: "npm test",
-      });
-    }
+      // Tests
+      if (options.coverage) {
+        s = s.add({
+          name: "Run tests with coverage",
+          run: "npm run test:coverage",
+        });
 
-    // Additional tests
-    if (options.additionalTests) {
-      for (const test of options.additionalTests) {
-        this.addStep({
-          name: `Run ${test}`,
-          run: `npm run test:${test}`,
+        s = s.add(uploadCodecov({
+          name: "Upload coverage",
+          with: {
+            files: "./coverage/lcov.info",
+          },
+        }));
+      } else {
+        s = s.add({
+          name: "Run tests",
+          run: "npm test",
         });
       }
-    }
 
-    // Upload artifacts
-    if (options.uploadArtifacts) {
-      this.addStep(uploadArtifact({
-        name: "Upload test results",
-        with: {
-          name: "test-results",
-          path: "test-results/",
-        },
-      }));
-    }
+      // Additional tests
+      if (options.additionalTests) {
+        for (const test of options.additionalTests) {
+          s = s.add({
+            name: `Run ${test}`,
+            run: `npm run test:${test}`,
+          });
+        }
+      }
+
+      // Upload artifacts
+      if (options.uploadArtifacts) {
+        s = s.add(uploadArtifact({
+          name: "Upload test results",
+          with: {
+            name: "test-results",
+            path: "test-results/",
+          },
+        }));
+      }
+
+      return s;
+    });
   }
 }
 
@@ -317,16 +335,17 @@ const workflow = new Workflow({
     push: { branches: ["main"] },
     pull_request: { branches: ["main"] },
   },
-})
-  .addJob("test-basic", new TestSuiteJob({
-    nodeVersion: "20",
-  }))
-  .addJob("test-full", new TestSuiteJob({
-    nodeVersion: "20",
-    coverage: true,
-    uploadArtifacts: true,
-    additionalTests: ["integration", "e2e"],
-  }));
+}).jobs(j => j
+    .add("test-basic", new TestSuiteJob({
+      nodeVersion: "20",
+    }))
+    .add("test-full", new TestSuiteJob({
+      nodeVersion: "20",
+      coverage: true,
+      uploadArtifacts: true,
+      additionalTests: ["integration", "e2e"],
+    }))
+  );
 
 workflow.build("full-test");
 ```

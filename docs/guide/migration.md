@@ -85,22 +85,23 @@ const action = new Action({
 });
 
 action
-    .addStep(checkout({}))
-    .addStep({
-        name: "Install dependencies",
-        run: "npm ci",
-        shell: "bash",
-    })
-    .addStep(cache({
-        id: "cache",
-        name: "Cache node_modules",
-        with: {
-            path: "node_modules",
-            key: "${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}",
-        },
-    }));
-
-action.build("setup-env");
+    .steps(s => s
+        .add(checkout({}))
+        .add({
+            name: "Install dependencies",
+            run: "npm ci",
+            shell: "bash",
+        })
+        .add(cache({
+            id: "cache",
+            name: "Cache node_modules",
+            with: {
+                path: "node_modules",
+                key: "${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}",
+            },
+        }))
+    )
+    .build("setup-env");
 ```
 
 ### JavaScript Action
@@ -255,29 +256,29 @@ import { getAction, Job, Workflow } from "../generated/index.js";
 const checkout = getAction("actions/checkout@v5");
 const setupNode = getAction("actions/setup-node@v4");
 
-// Create job
-const build = new Job("ubuntu-latest")
-  .addStep(checkout({}))
-  .addStep(setupNode({
-    with: {
-      "node-version": "20",
-    },
-  }))
-  .addStep({ run: "npm ci" })
-  .addStep({ run: "npm test" });
-
-// Create workflow
-const workflow = new Workflow({
+// Create workflow with jobs and steps
+new Workflow({
   name: "CI",
   on: {
     push: {
       branches: ["main"],
     },
   },
-}).addJob("build", build);
-
-// Build YAML
-workflow.build("ci");
+})
+  .jobs(j => j
+    .add("build",
+      new Job("ubuntu-latest")
+        .steps(s => s
+          .add(checkout({}))
+          .add(setupNode({
+            with: { "node-version": "20" },
+          }))
+          .add({ run: "npm ci" })
+          .add({ run: "npm test" })
+        )
+    )
+  )
+  .build("ci");
 ```
 
 ### Step 4: Build and Verify
@@ -317,18 +318,26 @@ jobs:
 **TypeScript:**
 ```typescript
 const test = new Job("ubuntu-latest")
-  .addStep({ run: "npm test" });
+  .steps(s => s
+    .add({ run: "npm test" })
+  );
 
-const build = new Job("ubuntu-latest")
-  .needs(["test"])
-  .addStep({ run: "npm run build" });
+const build = new Job("ubuntu-latest", {
+  needs: ["test"],
+})
+  .steps(s => s
+    .add({ run: "npm run build" })
+  );
 
-const workflow = new Workflow({
+new Workflow({
   name: "CI",
   on: { push: { branches: ["main"] } },
 })
-  .addJob("test", test)
-  .addJob("build", build);
+  .jobs(j => j
+    .add("test", test)
+    .add("build", build)
+  )
+  .build("ci");
 ```
 
 ### Matrix Strategy
@@ -346,14 +355,17 @@ jobs:
 
 **TypeScript:**
 ```typescript
-const test = new Job("${{ matrix.os }}")
-  .strategy({
+const test = new Job("${{ matrix.os }}", {
+  strategy: {
     matrix: {
       os: ["ubuntu-latest", "macos-latest"],
       node: ["18", "20", "22"],
     },
-  })
-  .addStep(checkout({}));
+  },
+})
+  .steps(s => s
+    .add(checkout({}))
+  );
 ```
 
 ### Environment Variables
@@ -372,18 +384,23 @@ jobs:
 
 **TypeScript:**
 ```typescript
-const deploy = new Job("ubuntu-latest")
-  .env({
-    API_KEY: "${{ secrets.API_KEY }}",
-  });
-
-const workflow = new Workflow({
+new Workflow({
   name: "Deploy",
   on: { push: { branches: ["main"] } },
   env: {
     NODE_ENV: "production",
   },
-}).addJob("deploy", deploy);
+})
+  .jobs(j => j
+    .add("deploy",
+      new Job("ubuntu-latest", {
+        env: {
+          API_KEY: "${{ secrets.API_KEY }}",
+        },
+      })
+    )
+  )
+  .build("deploy");
 ```
 
 ### Conditional Steps
@@ -398,7 +415,7 @@ steps:
 
 **TypeScript:**
 ```typescript
-.addStep({
+.add({
   name: "Deploy",
   if: "github.ref == 'refs/heads/main'",
   run: "npm run deploy",
@@ -421,13 +438,78 @@ jobs:
 **TypeScript:**
 ```typescript
 const build = new Job("ubuntu-latest")
+  .steps(s => s
+    .add({
+      id: "version",
+      run: 'echo "value=1.0.0" >> $GITHUB_OUTPUT',
+    })
+  )
   .outputs({
     version: "${{ steps.version.outputs.value }}",
-  })
-  .addStep({
-    id: "version",
-    run: 'echo "value=1.0.0" >> $GITHUB_OUTPUT',
   });
+```
+
+## Configuration Migration
+
+If your project uses the older `.gaji.toml` configuration file, gaji can migrate it to `gaji.config.ts` automatically.
+
+### Automatic Migration
+
+When you run `gaji init` in a project that has a `.gaji.toml`, gaji detects the file and offers to migrate it:
+
+```bash
+gaji init
+# Detected .gaji.toml configuration file.
+# Migrate to gaji.config.ts? [y/N]
+```
+
+If you confirm, gaji will:
+
+1. Read `.gaji.toml` and generate a `gaji.config.ts` file with `defineConfig()`
+2. If `.gaji.local.toml` exists, generate a corresponding `gaji.config.local.ts`
+3. Remove the old TOML files after successful migration
+
+### Manual Migration
+
+To migrate manually, create `gaji.config.ts` at your project root:
+
+**Before** (`.gaji.toml`):
+
+```toml
+workflows = "src/workflows"
+output = ".github"
+
+[build]
+cache_ttl_days = 14
+
+[github]
+token = "ghp_xxx"
+```
+
+**After** (`gaji.config.ts`):
+
+```typescript
+import { defineConfig } from "./generated/index.js";
+
+export default defineConfig({
+  workflows: "src/workflows",
+  build: {
+    cacheTtlDays: 14,
+  },
+});
+```
+
+Note that TOML keys use `snake_case` while TypeScript config uses `camelCase`. Secrets like `github.token` should go in `gaji.config.local.ts` (which should be added to `.gitignore`):
+
+```typescript
+// gaji.config.local.ts
+import { defineConfig } from "./generated/index.js";
+
+export default defineConfig({
+  github: {
+    token: "ghp_xxx",
+  },
+});
 ```
 
 ## Migration Checklist

@@ -22,18 +22,20 @@ import { getAction, Job, Workflow } from "../generated/index.js";
 // 1. Import actions
 const checkout = getAction("actions/checkout@v5");
 
-// 2. Create jobs
-const build = new Job("ubuntu-latest")
-  .addStep(checkout({}));
-
-// 3. Create workflow
-const workflow = new Workflow({
+// 2. Create workflow with jobs and steps
+new Workflow({
   name: "CI",
   on: { push: { branches: ["main"] } },
-}).addJob("build", build);
-
-// 4. Build to YAML
-workflow.build("ci");
+})
+  .jobs(j => j
+    .add("build",
+      new Job("ubuntu-latest")
+        .steps(s => s
+          .add(checkout({}))
+        )
+    )
+  )
+  .build("ci");
 ```
 
 ## Using Actions
@@ -110,47 +112,49 @@ new Job(["self-hosted", "linux", "x64"])
 
 ### Adding Steps
 
-Steps can be added using `.addStep()`:
+Steps are added via the `.steps()` callback with `.add()`:
 
 ```typescript
 const job = new Job("ubuntu-latest")
-  // Action step
-  .addStep(checkout({
-    name: "Checkout",
-  }))
+  .steps(s => s
+    // Action step
+    .add(checkout({
+      name: "Checkout",
+    }))
 
-  // Run command
-  .addStep({
-    name: "Build",
-    run: "npm run build",
-  })
+    // Run command
+    .add({
+      name: "Build",
+      run: "npm run build",
+    })
 
-  // Multi-line command
-  .addStep({
-    name: "Install dependencies",
-    run: `
-      npm ci
-      npm run build
-      npm test
-    `.trim(),
-  })
+    // Multi-line command
+    .add({
+      name: "Install dependencies",
+      run: `
+        npm ci
+        npm run build
+        npm test
+      `.trim(),
+    })
 
-  // With environment variables
-  .addStep({
-    name: "Deploy",
-    run: "npm run deploy",
-    env: {
-      NODE_ENV: "production",
-      API_KEY: "${{ secrets.API_KEY }}",
-    },
-  })
+    // With environment variables
+    .add({
+      name: "Deploy",
+      run: "npm run deploy",
+      env: {
+        NODE_ENV: "production",
+        API_KEY: "${{ secrets.API_KEY }}",
+      },
+    })
 
-  // Conditional step
-  .addStep({
-    name: "Upload artifacts",
-    if: "success()",
-    run: "npm run upload",
-  });
+    // Conditional step
+    .add({
+      name: "Upload artifacts",
+      if: "success()",
+      run: "npm run upload",
+    })
+  );
 ```
 
 ## Creating Workflows
@@ -158,16 +162,18 @@ const job = new Job("ubuntu-latest")
 ### Basic Workflow
 
 ```typescript
-const workflow = new Workflow({
+new Workflow({
   name: "CI",
   on: {
     push: {
       branches: ["main"],
     },
   },
-}).addJob("build", buildJob);
-
-workflow.build("ci");
+})
+  .jobs(j => j
+    .add("build", buildJob)
+  )
+  .build("ci");
 ```
 
 ### Trigger Events
@@ -219,60 +225,76 @@ on: {
 
 ```typescript
 const test = new Job("ubuntu-latest")
-  .addStep(checkout({}))
-  .addStep({ run: "npm test" });
+  .steps(s => s
+    .add(checkout({}))
+    .add({ run: "npm test" })
+  );
 
 const build = new Job("ubuntu-latest")
-  .addStep(checkout({}))
-  .addStep({ run: "npm run build" });
+  .steps(s => s
+    .add(checkout({}))
+    .add({ run: "npm run build" })
+  );
 
-const workflow = new Workflow({
+new Workflow({
   name: "CI",
   on: { push: { branches: ["main"] } },
 })
-  .addJob("test", test)
-  .addJob("build", build);
+  .jobs(j => j
+    .add("test", test)
+    .add("build", build)
+  )
+  .build("ci");
 ```
 
 ### Job Dependencies
 
-Use `.needs()` to create job dependencies:
+Use `needs` in the `JobConfig` constructor parameter:
 
 ```typescript
 const test = new Job("ubuntu-latest")
-  .addStep({ run: "npm test" });
+  .steps(s => s
+    .add({ run: "npm test" })
+  );
 
-const deploy = new Job("ubuntu-latest")
-  .needs(["test"])  // Wait for test job
-  .addStep({ run: "npm run deploy" });
+const deploy = new Job("ubuntu-latest", {
+  needs: ["test"],  // Wait for test job
+})
+  .steps(s => s
+    .add({ run: "npm run deploy" })
+  );
 
-const workflow = new Workflow({
+new Workflow({
   name: "Deploy",
   on: { push: { branches: ["main"] } },
 })
-  .addJob("test", test)
-  .addJob("deploy", deploy);
+  .jobs(j => j
+    .add("test", test)
+    .add("deploy", deploy)
+  )
+  .build("deploy");
 ```
 
 ## Matrix Builds
 
-Use `.strategy()` to run a job across multiple configurations:
+Use `strategy` in the `JobConfig` constructor:
 
 ```typescript
-const test = new Job("${{ matrix.os }}")
-  .strategy({
+const test = new Job("${{ matrix.os }}", {
+  strategy: {
     matrix: {
       os: ["ubuntu-latest", "macos-latest", "windows-latest"],
       node: ["18", "20", "22"],
     },
-  })
+  },
+})
 ```
 
 For a complete matrix build example with generated YAML, see [Matrix Build Example](/examples/matrix-build).
 
 ## Composite Actions
 
-Create reusable [composite actions](https://docs.github.com/en/actions/sharing-automations/creating-actions/creating-a-composite-action) using `Action`. Define inputs, add steps, and call `.build()` to generate `action.yml` in your repository.
+Create reusable [composite actions](https://docs.github.com/en/actions/sharing-automations/creating-actions/creating-a-composite-action) using `Action`. Define inputs, add steps via `.steps()`, and call `.build()` to generate `action.yml` in your repository.
 
 For a complete example, see [Composite Action Example](/examples/composite-action). For the full API, see [Action](/reference/api#action).
 
@@ -291,11 +313,12 @@ const setupNode = getAction("actions/setup-node@v4");
 class NodeTestJob extends Job {
   constructor(nodeVersion: string) {
     super("ubuntu-latest");
-    this
-      .addStep(checkout({}))
-      .addStep(setupNode({ with: { "node-version": nodeVersion } }))
-      .addStep({ run: "npm ci" })
-      .addStep({ run: "npm test" });
+    this.steps(s => s
+      .add(checkout({}))
+      .add(setupNode({ with: { "node-version": nodeVersion } }))
+      .add({ run: "npm ci" })
+      .add({ run: "npm test" })
+    );
   }
 }
 ```
@@ -317,23 +340,7 @@ import { getAction, Job, Workflow } from "../generated/index.js";
 const checkout = getAction("actions/checkout@v5");
 const setupNode = getAction("actions/setup-node@v4");
 
-const publish = new Job("ubuntu-latest")
-  .addStep(checkout({ name: "Checkout" }))
-  .addStep(setupNode({
-    name: "Setup Node.js",
-    with: { "node-version": "20", cache: "npm" },
-  }))
-  .addStep({ name: "Install dependencies", run: "npm ci" })
-  .addStep({ name: "Build", run: "npm run build" })
-  .addStep({
-    name: "Publish",
-    run: "npm run publish:${{ inputs.environment }}",
-    env: {
-      DEPLOY_TOKEN: "${{ secrets.DEPLOY_TOKEN }}",
-    },
-  });
-
-const workflow = new Workflow({
+new Workflow({
   name: "Publish",
   on: {
     workflow_call: {
@@ -350,9 +357,29 @@ const workflow = new Workflow({
       },
     },
   },
-}).addJob("publish", publish);
-
-workflow.build("publish");
+})
+  .jobs(j => j
+    .add("publish",
+      new Job("ubuntu-latest")
+        .steps(s => s
+          .add(checkout({ name: "Checkout" }))
+          .add(setupNode({
+            name: "Setup Node.js",
+            with: { "node-version": "20", cache: "npm" },
+          }))
+          .add({ name: "Install dependencies", run: "npm ci" })
+          .add({ name: "Build", run: "npm run build" })
+          .add({
+            name: "Publish",
+            run: "npm run publish:${{ inputs.environment }}",
+            env: {
+              DEPLOY_TOKEN: "${{ secrets.DEPLOY_TOKEN }}",
+            },
+          })
+        )
+    )
+  )
+  .build("publish");
 ```
 
 Next, use `WorkflowCall` to call this workflow for each environment. Use `needs` to enforce the order alpha → staging → live:
@@ -363,29 +390,33 @@ Next, use `WorkflowCall` to call this workflow for each environment. Use `needs`
 // ---cut---
 import { WorkflowCall, Workflow } from "../generated/index.js";
 
-const alpha = new WorkflowCall("./.github/workflows/publish.yml")
-  .with({ environment: "alpha" })
-  .secrets("inherit");
+const alpha = new WorkflowCall("./.github/workflows/publish.yml", {
+  with: { environment: "alpha" },
+  secrets: "inherit",
+});
 
-const staging = new WorkflowCall("./.github/workflows/publish.yml")
-  .with({ environment: "staging" })
-  .secrets("inherit")
-  .needs(["publish-alpha"]);
+const staging = new WorkflowCall("./.github/workflows/publish.yml", {
+  with: { environment: "staging" },
+  secrets: "inherit",
+  needs: ["publish-alpha"],
+});
 
-const live = new WorkflowCall("./.github/workflows/publish.yml")
-  .with({ environment: "live" })
-  .secrets("inherit")
-  .needs(["publish-staging"]);
+const live = new WorkflowCall("./.github/workflows/publish.yml", {
+  with: { environment: "live" },
+  secrets: "inherit",
+  needs: ["publish-staging"],
+});
 
-const workflow = new Workflow({
+new Workflow({
   name: "Release",
   on: { push: { tags: ["v*"] } },
 })
-  .addJob("publish-alpha", alpha)
-  .addJob("publish-staging", staging)
-  .addJob("publish-live", live);
-
-workflow.build("release");
+  .jobs(j => j
+    .add("publish-alpha", alpha)
+    .add("publish-staging", staging)
+    .add("publish-live", live)
+  )
+  .build("release");
 ```
 
 The benefit of this structure is that deploy logic lives in `publish.yml` alone. When you need to change deploy steps, just update `publish.ts` and it applies to all environments.
@@ -401,7 +432,7 @@ See [DockerAction API](/reference/api#dockeraction) for the full API and example
 ### Workflow-level
 
 ```typescript
-const workflow = new Workflow({
+new Workflow({
   name: "CI",
   on: { push: { branches: ["main"] } },
   env: {
@@ -413,16 +444,17 @@ const workflow = new Workflow({
 ### Job-level
 
 ```typescript
-const job = new Job("ubuntu-latest")
-  .env({
+new Job("ubuntu-latest", {
+  env: {
     DATABASE_URL: "${{ secrets.DATABASE_URL }}",
-  });
+  },
+});
 ```
 
 ### Step-level
 
 ```typescript
-.addStep({
+.add({
   run: "npm run deploy",
   env: {
     API_KEY: "${{ secrets.API_KEY }}",
@@ -443,59 +475,69 @@ const checkout = getAction("actions/checkout@v5");
 const step = checkout({ id: "my-checkout" });
 step.outputs.ref     // "${{ steps.my-checkout.outputs.ref }}"
 step.outputs.commit  // "${{ steps.my-checkout.outputs.commit }}"
-
-const job = new Job("ubuntu-latest")
-  .addStep(step)
-  .addStep({ run: `echo ${step.outputs.ref}` });
 ```
 
 ### Passing Outputs Between Jobs
 
-Use `jobOutputs()` to create typed references for downstream jobs. It reads the job's `.outputs()` keys and generates <code v-pre>${{ needs.&lt;jobId&gt;.outputs.&lt;key&gt; }}</code> expressions:
+The primary pattern uses the `.jobs()` callback, where job output context flows automatically:
 
 ```typescript
 const checkout = getAction("actions/checkout@v5");
-const step = checkout({ id: "my-checkout" });
 
-// Define job with typed outputs
-const build = new Job("ubuntu-latest")
-  .addStep(step)
-  .outputs({ ref: step.outputs.ref, sha: step.outputs.commit });
-
-// Create typed references for downstream jobs
-const buildOutputs = jobOutputs("build", build);
-// buildOutputs.ref → "${{ needs.build.outputs.ref }}"
-// buildOutputs.sha → "${{ needs.build.outputs.sha }}"
-
-const deploy = new Job("ubuntu-latest")
-  .needs("build")
-  .addStep({ run: `deploy --ref ${buildOutputs.ref}` });
-
-const workflow = new Workflow({
-  name: "CI",
-  on: { push: { branches: ["main"] } },
-})
-  .addJob("build", build)
-  .addJob("deploy", deploy);
+new Workflow({ name: "CI", on: { push: {} } })
+  .jobs(j => j
+    .add("build",
+      new Job("ubuntu-latest")
+        .steps(s => s
+          .add(checkout({ id: "co" }))
+        )
+        .outputs(output => ({ ref: output.co.ref }))
+    )
+    .add("deploy", output =>
+      new Job("ubuntu-latest", { needs: ["build"] })
+        .steps(s => s
+          .add({ run: "echo " + output.build.ref })
+        )
+    )
+  )
+  .build("ci");
 ```
 
-You can also use manually defined outputs (e.g., from `run` steps that write to `$GITHUB_OUTPUT`):
+The `output` parameter in the `deploy` callback provides typed access to the `build` job's declared outputs, generating <code v-pre>${{ needs.build.outputs.ref }}</code> expressions.
+
+You can also use `jobOutputs()` as a compatibility helper when defining jobs as separate variables:
 
 ```typescript
-const setup = new Job("ubuntu-latest")
-  .addStep({
-    id: "version",
-    run: 'echo "value=1.0.0" >> $GITHUB_OUTPUT',
-  })
-  .outputs({
-    version: "${{ steps.version.outputs.value }}",
-  });
+const build = new Job("ubuntu-latest")
+  .steps(s => s.add(checkout({ id: "co" })))
+  .outputs(output => ({ ref: output.co.ref }));
 
-const setupOutputs = jobOutputs("setup", setup);
+const buildOutputs = jobOutputs("build", build);
+// buildOutputs.ref → "${{ needs.build.outputs.ref }}"
+```
 
-const deploy = new Job("ubuntu-latest")
-  .needs("setup")
-  .addStep({ run: `deploy --version ${setupOutputs.version}` });
+For manually defined outputs (e.g., from `run` steps that write to `$GITHUB_OUTPUT`):
+
+```typescript
+new Workflow({ name: "CI", on: { push: { tags: ["v*"] } } })
+  .jobs(j => j
+    .add("setup",
+      new Job("ubuntu-latest")
+        .steps(s => s
+          .add({ id: "version", run: 'echo "value=1.0.0" >> $GITHUB_OUTPUT' })
+        )
+        .outputs({
+          version: "${{ steps.version.outputs.value }}",
+        })
+    )
+    .add("deploy", output =>
+      new Job("ubuntu-latest", { needs: ["setup"] })
+        .steps(s => s
+          .add({ run: "deploy --version " + output.setup.version })
+        )
+    )
+  )
+  .build("ci");
 ```
 
 ## Tips
@@ -541,20 +583,20 @@ Since gaji converts JavaScript strings to YAML, characters that are already esca
 
 ```typescript
 // In TypeScript, \n is a newline character
-.addStep({ run: "echo \"hello\nworld\"" })
+.add({ run: "echo \"hello\nworld\"" })
 ```
 
 The JS string contains a literal newline, which YAML will handle correctly. However, if you actually want the literal `\n` characters in the YAML output (e.g., for multiline `echo`), you need to double-escape:
 
 ```typescript
 // Double-escape to preserve the literal \n in YAML
-.addStep({ run: "echo hello\\nworld" })
+.add({ run: "echo hello\\nworld" })
 ```
 
 **Tip**: For multi-line commands, prefer template literals instead of escape sequences:
 
 ```typescript
-.addStep({
+.add({
   run: `
     echo hello
     echo world

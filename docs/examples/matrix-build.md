@@ -13,31 +13,34 @@ const checkout = getAction("actions/checkout@v5");
 const setupNode = getAction("actions/setup-node@v4");
 
 // Define matrix test job
-const test = new Job("${{ matrix.os }}")
-  .strategy({
-    matrix: {
-      os: ["ubuntu-latest", "macos-latest", "windows-latest"],
-      node: ["18", "20", "22"],
+const test = new Job("${{ matrix.os }}", {
+    strategy: {
+      matrix: {
+        os: ["ubuntu-latest", "macos-latest", "windows-latest"],
+        node: ["18", "20", "22"],
+      },
     },
   })
-  .addStep(checkout({
-    name: "Checkout code",
-  }))
-  .addStep(setupNode({
-    name: "Setup Node.js ${{ matrix.node }}",
-    with: {
-      "node-version": "${{ matrix.node }}",
-      cache: "npm",
-    },
-  }))
-  .addStep({
-    name: "Install dependencies",
-    run: "npm ci",
-  })
-  .addStep({
-    name: "Run tests",
-    run: "npm test",
-  });
+  .steps(s => s
+    .add(checkout({
+      name: "Checkout code",
+    }))
+    .add(setupNode({
+      name: "Setup Node.js ${{ matrix.node }}",
+      with: {
+        "node-version": "${{ matrix.node }}",
+        cache: "npm",
+      },
+    }))
+    .add({
+      name: "Install dependencies",
+      run: "npm ci",
+    })
+    .add({
+      name: "Run tests",
+      run: "npm test",
+    })
+  );
 
 // Create workflow
 const workflow = new Workflow({
@@ -50,7 +53,9 @@ const workflow = new Workflow({
       branches: ["main"],
     },
   },
-}).addJob("test", test);
+}).jobs(j => j
+    .add("test", test)
+  );
 
 workflow.build("matrix-test");
 ```
@@ -100,47 +105,53 @@ This creates **9 jobs** (3 OS × 3 Node versions).
 ### Include/Exclude
 
 ```typescript
-.strategy({
-  matrix: {
-    os: ["ubuntu-latest", "macos-latest", "windows-latest"],
-    node: ["18", "20", "22"],
-    include: [
-      {
-        os: "ubuntu-latest",
-        node: "16",
-        experimental: true,
-      },
-    ],
-    exclude: [
-      {
-        os: "macos-latest",
-        node: "18",  // Skip Node 18 on macOS
-      },
-    ],
+{
+  strategy: {
+    matrix: {
+      os: ["ubuntu-latest", "macos-latest", "windows-latest"],
+      node: ["18", "20", "22"],
+      include: [
+        {
+          os: "ubuntu-latest",
+          node: "16",
+          experimental: true,
+        },
+      ],
+      exclude: [
+        {
+          os: "macos-latest",
+          node: "18",  // Skip Node 18 on macOS
+        },
+      ],
+    },
   },
-})
+}
 ```
 
 ### Fail-Fast
 
 ```typescript
-.strategy({
-  "fail-fast": false,  // Continue even if one job fails
-  matrix: {
-    node: ["18", "20", "22"],
+{
+  strategy: {
+    "fail-fast": false,  // Continue even if one job fails
+    matrix: {
+      node: ["18", "20", "22"],
+    },
   },
-})
+}
 ```
 
 ### Max Parallel
 
 ```typescript
-.strategy({
-  "max-parallel": 2,  // Run max 2 jobs in parallel
-  matrix: {
-    node: ["18", "20", "22"],
+{
+  strategy: {
+    "max-parallel": 2,  // Run max 2 jobs in parallel
+    matrix: {
+      node: ["18", "20", "22"],
+    },
   },
-})
+}
 ```
 
 ## Advanced Example: Test + Build
@@ -155,33 +166,39 @@ const setupNode = getAction("actions/setup-node@v4");
 const uploadArtifact = getAction("actions/upload-artifact@v4");
 
 // Matrix test job
-const test = new Job("${{ matrix.os }}")
-  .strategy({
-    matrix: {
-      os: ["ubuntu-latest", "macos-latest", "windows-latest"],
-      node: ["20"],
+const test = new Job("${{ matrix.os }}", {
+    strategy: {
+      matrix: {
+        os: ["ubuntu-latest", "macos-latest", "windows-latest"],
+        node: ["20"],
+      },
     },
   })
-  .addStep(checkout({}))
-  .addStep(setupNode({
-    with: { "node-version": "${{ matrix.node }}" },
-  }))
-  .addStep({ run: "npm ci" })
-  .addStep({ run: "npm test" });
+  .steps(s => s
+    .add(checkout({}))
+    .add(setupNode({
+      with: { "node-version": "${{ matrix.node }}" },
+    }))
+    .add({ run: "npm ci" })
+    .add({ run: "npm test" })
+  );
 
 // Build job (runs after all tests pass)
-const build = new Job("ubuntu-latest")
-  .needs(["test"])
-  .addStep(checkout({}))
-  .addStep(setupNode({ with: { "node-version": "20" } }))
-  .addStep({ run: "npm ci" })
-  .addStep({ run: "npm run build" })
-  .addStep(uploadArtifact({
-    with: {
-      name: "build-output",
-      path: "dist/",
-    },
-  }));
+const build = new Job("ubuntu-latest", {
+    needs: ["test"],
+  })
+  .steps(s => s
+    .add(checkout({}))
+    .add(setupNode({ with: { "node-version": "20" } }))
+    .add({ run: "npm ci" })
+    .add({ run: "npm run build" })
+    .add(uploadArtifact({
+      with: {
+        name: "build-output",
+        path: "dist/",
+      },
+    }))
+  );
 
 // Create workflow
 const workflow = new Workflow({
@@ -189,9 +206,10 @@ const workflow = new Workflow({
   on: {
     push: { branches: ["main"] },
   },
-})
-  .addJob("test", test)
-  .addJob("build", build);
+}).jobs(j => j
+    .add("test", test)
+    .add("build", build)
+  );
 
 workflow.build("test-build");
 ```
@@ -199,28 +217,31 @@ workflow.build("test-build");
 ## Real-World Example: Cross-Platform Binary
 
 ```typescript
-const build = new Job("${{ matrix.os }}")
-  .strategy({
-    matrix: {
-      include: [
-        { os: "ubuntu-latest", target: "x86_64-unknown-linux-gnu", name: "linux-x64" },
-        { os: "macos-latest", target: "x86_64-apple-darwin", name: "darwin-x64" },
-        { os: "macos-latest", target: "aarch64-apple-darwin", name: "darwin-arm64" },
-        { os: "windows-latest", target: "x86_64-pc-windows-msvc", name: "win32-x64" },
-      ],
+const build = new Job("${{ matrix.os }}", {
+    strategy: {
+      matrix: {
+        include: [
+          { os: "ubuntu-latest", target: "x86_64-unknown-linux-gnu", name: "linux-x64" },
+          { os: "macos-latest", target: "x86_64-apple-darwin", name: "darwin-x64" },
+          { os: "macos-latest", target: "aarch64-apple-darwin", name: "darwin-arm64" },
+          { os: "windows-latest", target: "x86_64-pc-windows-msvc", name: "win32-x64" },
+        ],
+      },
     },
   })
-  .addStep(checkout({}))
-  .addStep({
-    name: "Build binary",
-    run: "cargo build --release --target ${{ matrix.target }}",
-  })
-  .addStep(uploadArtifact({
-    with: {
-      name: "binary-${{ matrix.name }}",
-      path: "target/${{ matrix.target }}/release/",
-    },
-  }));
+  .steps(s => s
+    .add(checkout({}))
+    .add({
+      name: "Build binary",
+      run: "cargo build --release --target ${{ matrix.target }}",
+    })
+    .add(uploadArtifact({
+      with: {
+        name: "binary-${{ matrix.name }}",
+        path: "target/${{ matrix.target }}/release/",
+      },
+    }))
+  );
 ```
 
 ## Next Steps

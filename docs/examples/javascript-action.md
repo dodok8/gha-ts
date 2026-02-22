@@ -82,25 +82,29 @@ action.build("hello-world");
 
 // Use the action in a workflow
 const helloWorldJob = new Job("ubuntu-latest")
-  .addStep({
-    name: "Hello world action step",
-    id: "hello",
-    ...ActionRef.from(action).toJSON(),
-    with: {
-      "who-to-greet": "Mona the Octocat",
-    },
-  })
-  .addStep({
-    name: "Get the output time",
-    run: 'echo "The time was ${{ steps.hello.outputs.time }}"',
-  });
+  .steps(s => s
+    .add({
+      name: "Hello world action step",
+      id: "hello",
+      ...ActionRef.from(action).toJSON(),
+      with: {
+        "who-to-greet": "Mona the Octocat",
+      },
+    })
+    .add({
+      name: "Get the output time",
+      run: 'echo "The time was ${{ steps.hello.outputs.time }}"',
+    })
+  );
 
 const workflow = new Workflow({
   name: "Use JavaScript Action",
   on: {
     push: { branches: ["main"] },
   },
-}).addJob("hello_world_job", helloWorldJob);
+}).jobs(j => j
+    .add("hello_world_job", helloWorldJob)
+  );
 
 workflow.build("use-js-action");
 ```

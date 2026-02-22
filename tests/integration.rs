@@ -848,3 +848,47 @@ async fn test_build_all_empty_directory() {
     let result = builder.build_all().await.unwrap();
     assert!(result.is_empty());
 }
+
+/// Test the full config TS → build pipeline: gaji.config.ts sets custom dirs,
+/// build reads them and writes output accordingly.
+#[test]
+fn test_config_ts_pipeline() {
+    let dir = tempfile::TempDir::new().unwrap();
+
+    // Write a gaji.config.ts with custom paths
+    std::fs::write(
+        dir.path().join("gaji.config.ts"),
+        r#"
+export default defineConfig({
+    workflows: "src/workflows",
+    output: "out/.github",
+    generated: "src/generated",
+    build: {
+        cacheTtlDays: 7,
+    },
+});
+"#,
+    )
+    .unwrap();
+
+    let config = gaji::config::Config::load_from_ts(&dir.path().join("gaji.config.ts")).unwrap();
+
+    assert_eq!(config.project.workflows_dir, "src/workflows");
+    assert_eq!(config.project.output_dir, "out/.github");
+    assert_eq!(config.project.generated_dir, "src/generated");
+    assert_eq!(config.build.cache_ttl_days, 7);
+
+    // Verify paths resolve correctly
+    assert_eq!(
+        config.workflows_path(),
+        std::path::PathBuf::from("src/workflows")
+    );
+    assert_eq!(
+        config.output_path(),
+        std::path::PathBuf::from("out/.github")
+    );
+    assert_eq!(
+        config.generated_path(),
+        std::path::PathBuf::from("src/generated")
+    );
+}

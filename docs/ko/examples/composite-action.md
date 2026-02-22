@@ -19,17 +19,18 @@ class NodeTestJob extends Job {
   constructor(nodeVersion: string) {
     super("ubuntu-latest");
 
-    this
-      .addStep(checkout({ name: "Checkout code" }))
-      .addStep(setupNode({
+    this.steps(s => s
+      .add(checkout({ name: "Checkout code" }))
+      .add(setupNode({
         name: `Setup Node.js ${nodeVersion}`,
         with: {
           "node-version": nodeVersion,
           cache: "npm",
         },
       }))
-      .addStep({ name: "Install dependencies", run: "npm ci" })
-      .addStep({ name: "Run tests", run: "npm test" });
+      .add({ name: "Install dependencies", run: "npm ci" })
+      .add({ name: "Run tests", run: "npm test" })
+    );
   }
 }
 
@@ -37,10 +38,11 @@ class NodeTestJob extends Job {
 const workflow = new Workflow({
   name: "Test Matrix",
   on: { push: { branches: ["main"] } },
-})
-  .addJob("test-node-18", new NodeTestJob("18"))
-  .addJob("test-node-20", new NodeTestJob("20"))
-  .addJob("test-node-22", new NodeTestJob("22"));
+}).jobs(j => j
+  .add("test-node-18", new NodeTestJob("18"))
+  .add("test-node-20", new NodeTestJob("20"))
+  .add("test-node-22", new NodeTestJob("22"))
+);
 
 workflow.build("test-matrix");
 ```
@@ -51,39 +53,43 @@ workflow.build("test-matrix");
 class DeployJob extends Job {
   constructor(
     environment: "staging" | "production",
-    region: string = "us-east-1"
+    region: string = "us-east-1",
+    config: Record<string, unknown> = {}
   ) {
-    super("ubuntu-latest");
-
-    this
-      .env({
+    super("ubuntu-latest", {
+      env: {
         ENVIRONMENT: environment,
         REGION: region,
         API_URL: environment === "production"
           ? "https://api.example.com"
           : "https://staging.api.example.com",
-      })
-      .addStep(checkout({ name: "Checkout code" }))
-      .addStep(setupNode({
+      },
+      ...config,
+    });
+
+    this.steps(s => s
+      .add(checkout({ name: "Checkout code" }))
+      .add(setupNode({
         name: "Setup Node.js",
         with: {
           "node-version": "20",
           cache: "npm",
         },
       }))
-      .addStep({ name: "Install dependencies", run: "npm ci" })
-      .addStep({
+      .add({ name: "Install dependencies", run: "npm ci" })
+      .add({
         name: "Build",
         run: `npm run build:${environment}`,
       })
-      .addStep({
+      .add({
         name: `Deploy to ${environment}`,
         run: `npm run deploy`,
         env: {
           DEPLOY_TOKEN: "${{ secrets.DEPLOY_TOKEN }}",
           AWS_REGION: region,
         },
-      });
+      })
+    );
   }
 }
 
@@ -91,13 +97,15 @@ class DeployJob extends Job {
 const workflow = new Workflow({
   name: "Deploy",
   on: { push: { tags: ["v*"] } },
-})
-  .addJob("deploy-staging-us", new DeployJob("staging", "us-east-1"))
-  .addJob("deploy-staging-eu", new DeployJob("staging", "eu-west-1"))
-  .addJob("deploy-production",
-    new DeployJob("production", "us-east-1")
-      .needs(["deploy-staging-us", "deploy-staging-eu"])
-  );
+}).jobs(j => j
+  .add("deploy-staging-us", new DeployJob("staging", "us-east-1"))
+  .add("deploy-staging-eu", new DeployJob("staging", "eu-west-1"))
+  .add("deploy-production",
+    new DeployJob("production", "us-east-1", {
+      needs: ["deploy-staging-us", "deploy-staging-eu"],
+    })
+  )
+);
 
 workflow.build("deploy");
 ```

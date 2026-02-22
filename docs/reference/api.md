@@ -9,9 +9,9 @@ Reference for gaji's TypeScript API.
 Represents a GitHub Actions workflow.
 
 ```typescript
-class Workflow {
+class Workflow<Cx = {}> {
   constructor(config: WorkflowConfig)
-  addJob(id: string, job: Job<any> | WorkflowCall): this
+  jobs<NewCx>(callback: (j: JobBuilder<{}>) => JobBuilder<NewCx>): Workflow<NewCx>
   static fromObject(def: WorkflowDefinition, id?: string): Workflow
   build(filename?: string): void
   toJSON(): WorkflowDefinition
@@ -20,7 +20,7 @@ class Workflow {
 
 | Method | Description |
 |--------|-------------|
-| `addJob(id, job)` | Add a job to the workflow. Accepts `Job` or `WorkflowCall`. |
+| `jobs(callback)` | Define workflow jobs via a `JobBuilder` callback. The callback receives a fresh `JobBuilder` and should return it with jobs added via `.add()`. |
 | `fromObject(def, id?)` | Create a Workflow from a raw `WorkflowDefinition` object. Useful for wrapping existing YAML-like definitions. |
 | `build(filename?)` | Compile the workflow to YAML. |
 | `toJSON()` | Serialize to a `WorkflowDefinition` object. |
@@ -29,11 +29,12 @@ class Workflow {
 
 ```typescript
 interface WorkflowConfig {
-  name: string
-  on: WorkflowTriggers
+  name?: string
+  on: WorkflowOn
   env?: Record<string, string>
-  permissions?: WorkflowPermissions
-  concurrency?: WorkflowConcurrency
+  permissions?: Permissions
+  concurrency?: { group: string; 'cancel-in-progress'?: boolean } | string
+  defaults?: { run?: { shell?: string; 'working-directory'?: string } }
 }
 ```
 
@@ -50,8 +51,10 @@ const workflow = new Workflow({
     NODE_ENV: "production",
   },
 })
-  .addJob("test", testJob)
-  .addJob("build", buildJob);
+  .jobs(j => j
+    .add("test", testJob)
+    .add("build", buildJob)
+  );
 
 workflow.build("ci");
 ```
@@ -77,69 +80,156 @@ workflow.build("raw");
 
 ### `Job`
 
-Represents a job in a workflow. The type parameter `O` tracks the job's output keys for type-safe inter-job references via `jobOutputs()`.
+Represents a job in a workflow. Has two type parameters: `Cx` tracks accumulated step output context (from `.steps()`), and `O` tracks the job's declared output keys (from `.outputs()`).
 
 ```typescript
-class Job<O extends Record<string, string> = {}> {
-  constructor(runsOn: string | string[], options?: Partial<JobDefinition>)
-  addStep(step: Step): this
-  needs(jobs: string | string[]): this
-  env(variables: Record<string, string>): this
-  when(condition: string): this
-  permissions(perms: Permissions): this
-  outputs<T extends Record<string, string>>(outputs: T): Job<T>
-  strategy(strategy: JobStrategy): this
-  continueOnError(v: boolean): this
-  timeoutMinutes(m: number): this
+class Job<Cx = {}, O extends Record<string, string> = {}> {
+  constructor(runsOn: string | string[], config?: JobConfig)
+  steps<NewCx>(callback: (s: StepBuilder<{}>) => StepBuilder<NewCx>): Job<NewCx, O>
+  outputs<T extends Record<string, string>>(outputs: T | ((output: Cx) => T)): Job<Cx, T>
   toJSON(): JobDefinition
 }
 ```
 
 | Method | Description |
 |--------|-------------|
-| `addStep(step)` | Append a step to the job. |
-| `needs(jobs)` | Set job dependencies. |
-| `env(variables)` | Set environment variables. |
-| `when(condition)` | Set the job's `if` condition (e.g., `"github.ref == 'refs/heads/main'"`). |
-| `permissions(perms)` | Set job-level permissions (e.g., `{ contents: 'read' }`). |
-| `outputs(outputs)` | Define job outputs. Returns `Job<T>` where `T` captures the output keys. |
-| `strategy(strategy)` | Set matrix strategy. |
-| `continueOnError(v)` | Set the `continue-on-error` flag. |
-| `timeoutMinutes(m)` | Set the `timeout-minutes` value. |
+| `steps(callback)` | Define job steps via a `StepBuilder` callback. The callback receives a fresh `StepBuilder` and should return it with steps added via `.add()`. |
+| `outputs(outputs)` | Define job outputs. Accepts a plain object or a callback that receives the step output context (`Cx`). |
 | `toJSON()` | Serialize to a `JobDefinition` object. |
 
-The optional `options` parameter in the constructor allows setting all job options at once:
+#### `JobConfig`
+
+All job-level settings are passed via the constructor's `config` parameter:
 
 ```typescript
-const job = new Job("ubuntu-latest", {
-  needs: ["test"],
-  env: { NODE_ENV: "production" },
-  "timeout-minutes": 30,
-});
+interface JobConfig {
+  permissions?: Permissions
+  needs?: string[]
+  strategy?: { matrix?: Record<string, unknown>; 'fail-fast'?: boolean; 'max-parallel'?: number }
+  if?: string
+  environment?: string | { name: string; url?: string }
+  concurrency?: { group: string; 'cancel-in-progress'?: boolean } | string
+  'timeout-minutes'?: number
+  env?: Record<string, string>
+  defaults?: { run?: { shell?: string; 'working-directory'?: string } }
+  services?: Record<string, Service>
+  container?: Container
+  'continue-on-error'?: boolean
+}
 ```
 
 #### Example
 
 ```typescript
-const job = new Job("ubuntu-latest")
-  .needs(["test"])
-  .env({
-    NODE_ENV: "production",
-  })
-  .when("github.event_name == 'push'")
-  .permissions({ contents: "read" })
-  .strategy({
+const checkout = getAction("actions/checkout@v5");
+
+const job = new Job("ubuntu-latest", {
+  needs: ["test"],
+  env: { NODE_ENV: "production" },
+  if: "github.event_name == 'push'",
+  permissions: { contents: "read" },
+  strategy: {
     matrix: {
       node: ["18", "20", "22"],
     },
-  })
+  },
+  "continue-on-error": false,
+  "timeout-minutes": 30,
+})
+  .steps(s => s
+    .add(checkout({}))
+    .add({ run: "npm test" })
+  )
   .outputs({
     version: "${{ steps.version.outputs.value }}",
-  })
-  .continueOnError(false)
-  .timeoutMinutes(30)
-  .addStep(checkout({}))
-  .addStep({ run: "npm test" });
+  });
+```
+
+---
+
+### `StepBuilder`
+
+Accumulates steps inside a `.steps()` callback. Each `.add()` call appends a step and updates the output context `Cx` when a step has an `id` and typed outputs.
+
+```typescript
+class StepBuilder<Cx = {}> {
+  add<Id extends string, StepO>(step: ActionStep<StepO, Id>): StepBuilder<Cx & Record<Id, StepO>>
+  add(step: JobStep): StepBuilder<Cx>
+  add<Id extends string, StepO>(stepFn: (output: Cx) => ActionStep<StepO, Id>): StepBuilder<Cx & Record<Id, StepO>>
+  add(stepFn: (output: Cx) => JobStep): StepBuilder<Cx>
+}
+```
+
+The four overloads cover:
+
+| Overload | Description |
+|----------|-------------|
+| `add(actionStep)` | Add an `ActionStep` with typed outputs (returned by `getAction()` with `id`). Merges outputs into `Cx`. |
+| `add(jobStep)` | Add a plain `JobStep` (run command or action without `id`). `Cx` unchanged. |
+| `add(output => actionStep)` | Callback form — receives previous step outputs (`Cx`), returns an `ActionStep`. |
+| `add(output => jobStep)` | Callback form — receives previous step outputs (`Cx`), returns a `JobStep`. |
+
+#### Example
+
+```typescript
+const checkout = getAction("actions/checkout@v5");
+
+new Job("ubuntu-latest")
+  .steps(s => s
+    .add(checkout({ id: "co" }))
+    .add(output => ({
+      name: "Use ref",
+      run: "echo " + output.co.ref,  // "${{ steps.co.outputs.ref }}"
+    }))
+  );
+```
+
+---
+
+### `JobBuilder`
+
+Accumulates jobs inside a `.jobs()` callback. Each `.add()` call registers a job and updates the output context `Cx` when a job has declared outputs.
+
+```typescript
+class JobBuilder<Cx = {}> {
+  add<Id extends string, O extends Record<string, string>>(
+    id: Id, job: Job<any, O>
+  ): JobBuilder<Cx & Record<Id, O>>
+  add(id: string, job: Job | WorkflowCall): JobBuilder<Cx>
+  add<Id extends string, O extends Record<string, string>>(
+    id: Id, jobFn: (output: Cx) => Job<any, O>
+  ): JobBuilder<Cx & Record<Id, O>>
+  add(id: string, jobFn: (output: Cx) => Job | WorkflowCall): JobBuilder<Cx>
+}
+```
+
+The four overloads cover:
+
+| Overload | Description |
+|----------|-------------|
+| `add(id, job)` | Add a `Job` with known outputs. Merges outputs into `Cx`. |
+| `add(id, job)` | Add a `Job` or `WorkflowCall` without output tracking. |
+| `add(id, output => job)` | Callback form — receives previous job outputs (`Cx`), returns a `Job`. |
+| `add(id, output => job)` | Callback form — receives previous job outputs (`Cx`), returns a `Job` or `WorkflowCall`. |
+
+#### Example
+
+```typescript
+new Workflow({ name: "CI", on: { push: {} } })
+  .jobs(j => j
+    .add("build",
+      new Job("ubuntu-latest")
+        .steps(s => s.add(checkout({ id: "co" })))
+        .outputs(output => ({ ref: output.co.ref }))
+    )
+    .add("deploy", output =>
+      new Job("ubuntu-latest", { needs: ["build"] })
+        .steps(s => s
+          .add({ run: "echo " + output.build.ref })
+        )
+    )
+  )
+  .build("ci");
 ```
 
 ---
@@ -149,23 +239,20 @@ const job = new Job("ubuntu-latest")
 Create reusable [composite actions](https://docs.github.com/en/actions/sharing-automations/creating-actions/creating-a-composite-action).
 
 ```typescript
-class Action {
-  constructor(config: ActionConfig)
-  addStep(step: Step): this
+class Action<Cx = {}> {
+  constructor(config: { name: string; description: string; inputs?: Record<string, unknown>; outputs?: Record<string, unknown> })
+  steps<NewCx>(callback: (s: StepBuilder<{}>) => StepBuilder<NewCx>): Action<NewCx>
+  outputMapping<T extends Record<string, string>>(mapping: (output: Cx) => T): Action<Cx>
   build(filename: string): void
+  toJSON(): object
 }
 ```
 
-#### `ActionConfig`
-
-```typescript
-interface ActionConfig {
-  name: string
-  description: string
-  inputs?: Record<string, ActionInput>
-  outputs?: Record<string, ActionOutput>
-}
-```
+| Method | Description |
+|--------|-------------|
+| `steps(callback)` | Define action steps via a `StepBuilder` callback. |
+| `outputMapping(fn)` | Map step outputs to action outputs. |
+| `build(filename)` | Compile the action to `action.yml`. |
 
 #### Example
 
@@ -177,7 +264,7 @@ import { Action, getAction } from "../generated/index.js";
 const checkout = getAction("actions/checkout@v5");
 const setupNode = getAction("actions/setup-node@v4");
 
-const setupEnv = new Action({
+new Action({
   name: "Setup Environment",
   description: "Setup Node.js and install dependencies",
   inputs: {
@@ -188,17 +275,16 @@ const setupEnv = new Action({
     },
   },
 })
-  .addStep(checkout({}))
-  .addStep(setupNode({
-    with: {
-      "node-version": "${{ inputs.node-version }}",
-    },
-  }))
-  .addStep({
-    run: "npm ci",
-  });
-
-setupEnv.build("setup-env");
+  .steps(s => s
+    .add(checkout({}))
+    .add(setupNode({
+      with: {
+        "node-version": "${{ inputs.node-version }}",
+      },
+    }))
+    .add({ run: "npm ci" })
+  )
+  .build("setup-env");
 ```
 
 This generates `action.yml` that can be used like:
@@ -207,12 +293,12 @@ This generates `action.yml` that can be used like:
 // In another workflow
 const setupEnv = getAction("./setup-env");
 
-const job = new Job("ubuntu-latest")
-  .addStep(setupEnv({
-    with: {
-      "node-version": "20",
-    },
-  }));
+new Job("ubuntu-latest")
+  .steps(s => s
+    .add(setupEnv({
+      with: { "node-version": "20" },
+    }))
+  );
 ```
 
 ---
@@ -395,26 +481,28 @@ class NodeTestJob extends Job {
   constructor(nodeVersion: string) {
     super("ubuntu-latest");
 
-    this
-      .addStep(checkout({}))
-      .addStep(setupNode({
-        with: {
-          "node-version": nodeVersion,
-        },
+    this.steps(s => s
+      .add(checkout({}))
+      .add(setupNode({
+        with: { "node-version": nodeVersion },
       }))
-      .addStep({ run: "npm ci" })
-      .addStep({ run: "npm test" });
+      .add({ run: "npm ci" })
+      .add({ run: "npm test" })
+    );
   }
 }
 
 // Use in workflows
-const workflow = new Workflow({
+new Workflow({
   name: "Test Matrix",
   on: { push: { branches: ["main"] } },
 })
-  .addJob("test-node-18", new NodeTestJob("18"))
-  .addJob("test-node-20", new NodeTestJob("20"))
-  .addJob("test-node-22", new NodeTestJob("22"));
+  .jobs(j => j
+    .add("test-node-18", new NodeTestJob("18"))
+    .add("test-node-20", new NodeTestJob("20"))
+    .add("test-node-22", new NodeTestJob("22"))
+  )
+  .build("test-matrix");
 ```
 
 You can also create more complex reusable jobs:
@@ -422,34 +510,39 @@ You can also create more complex reusable jobs:
 ```typescript
 class DeployJob extends Job {
   constructor(environment: "staging" | "production") {
-    super("ubuntu-latest");
-
-    this
-      .env({
+    super("ubuntu-latest", {
+      env: {
         ENVIRONMENT: environment,
         API_URL: environment === "production"
           ? "https://api.example.com"
           : "https://staging.api.example.com",
-      })
-      .addStep(checkout({}))
-      .addStep(setupNode({ with: { "node-version": "20" } }))
-      .addStep({
+      },
+    });
+
+    this.steps(s => s
+      .add(checkout({}))
+      .add(setupNode({ with: { "node-version": "20" } }))
+      .add({
         name: "Deploy",
         run: `npm run deploy:${environment}`,
         env: {
           DEPLOY_TOKEN: "${{ secrets.DEPLOY_TOKEN }}",
         },
-      });
+      })
+    );
   }
 }
 
 // Use in workflow
-const workflow = new Workflow({
+new Workflow({
   name: "Deploy",
   on: { push: { tags: ["v*"] } },
 })
-  .addJob("deploy-staging", new DeployJob("staging"))
-  .addJob("deploy-production", new DeployJob("production").needs(["deploy-staging"]));
+  .jobs(j => j
+    .add("deploy-staging", new DeployJob("staging"))
+    .add("deploy-production", new DeployJob("production"))
+  )
+  .build("deploy");
 ```
 
 ---
@@ -460,23 +553,18 @@ Call a [reusable workflow](https://docs.github.com/en/actions/using-workflows/re
 
 ```typescript
 class WorkflowCall {
-  constructor(uses: string)
-  with(inputs: Record<string, unknown>): this
-  secrets(s: Record<string, unknown> | 'inherit'): this
-  needs(deps: string | string[]): this
-  when(condition: string): this
-  permissions(perms: Permissions): this
+  constructor(uses: string, config?: {
+    with?: Record<string, unknown>
+    secrets?: Record<string, unknown> | 'inherit'
+    needs?: string[]
+    if?: string
+    permissions?: Permissions
+  })
   toJSON(): object
 }
 ```
 
-| Method | Description |
-|--------|-------------|
-| `with(inputs)` | Pass inputs to the reusable workflow. |
-| `secrets(s)` | Pass secrets explicitly, or use `'inherit'` to forward all secrets. |
-| `needs(deps)` | Set job dependencies. |
-| `when(condition)` | Set the job's `if` condition. |
-| `permissions(perms)` | Set job-level permissions. |
+All options are passed via the constructor's `config` parameter.
 
 #### Example
 
@@ -485,18 +573,23 @@ class WorkflowCall {
 // ---cut---
 import { WorkflowCall, Workflow } from "../generated/index.js";
 
-const deploy = new WorkflowCall("octo-org/deploy/.github/workflows/deploy.yml@main")
-  .with({ environment: "production" })
-  .secrets("inherit")
-  .needs(["build"]);
+const deploy = new WorkflowCall(
+  "octo-org/deploy/.github/workflows/deploy.yml@main",
+  {
+    with: { environment: "production" },
+    secrets: "inherit",
+    needs: ["build"],
+  },
+);
 
-const workflow = new Workflow({
+new Workflow({
   name: "Release",
   on: { push: { tags: ["v*"] } },
 })
-  .addJob("deploy", deploy);
-
-workflow.build("release");
+  .jobs(j => j
+    .add("deploy", deploy)
+  )
+  .build("release");
 ```
 
 Generated YAML:
@@ -543,11 +636,13 @@ const setupEnv = new Action({
 });
 setupEnv.build("setup-env");
 
-const job = new Job("ubuntu-latest")
-  .addStep({
-    ...ActionRef.from(setupEnv).toJSON(),
-    with: { "node-version": "20" },
-  });
+new Job("ubuntu-latest")
+  .steps(s => s
+    .add({
+      ...ActionRef.from(setupEnv).toJSON(),
+      with: { "node-version": "20" },
+    })
+  );
 ```
 
 ---
@@ -598,7 +693,7 @@ const checkoutStep = checkout({ id: "my-checkout" });
 // checkoutStep.outputs.ref → "${{ steps.my-checkout.outputs.ref }}"
 ```
 
-For a complete typed outputs example with `jobOutputs()`, see [Outputs in Writing Workflows](../guide/writing-workflows.md#outputs).
+For a complete typed outputs example, see [Outputs in Writing Workflows](../guide/writing-workflows.md#outputs).
 
 ---
 
@@ -606,10 +701,12 @@ For a complete typed outputs example with `jobOutputs()`, see [Outputs in Writin
 
 Create typed references to a job's outputs for use in downstream jobs. Reads the output keys from the `Job` object's `.outputs()` call and generates <code v-pre>${{ needs.&lt;jobId&gt;.outputs.&lt;key&gt; }}</code> expressions.
 
+This is a compatibility helper. The primary pattern is to use the `.jobs()` callback, where job output context is passed automatically.
+
 ```typescript
 function jobOutputs<O extends Record<string, string>>(
   jobId: string,
-  job: Job<O>,
+  job: Job<any, O>,
 ): JobOutputs<O>
 ```
 
@@ -622,6 +719,54 @@ const buildOutputs = jobOutputs("build", build);
 ```
 
 For a complete example, see [Outputs in Writing Workflows](../guide/writing-workflows.md#outputs).
+
+---
+
+### `defineConfig()`
+
+Type-safe configuration helper for `gaji.config.ts`.
+
+```typescript
+function defineConfig(config: GajiConfig): GajiConfig
+```
+
+#### `GajiConfig`
+
+```typescript
+interface GajiConfig {
+  workflows?: string        // Default: "workflows"
+  output?: string           // Default: ".github"
+  generated?: string        // Default: "generated"
+  watch?: {
+    debounce?: number       // Default: 300 (ms)
+    ignore?: string[]       // Default: ["node_modules", ".git", "generated"]
+  }
+  build?: {
+    validate?: boolean      // Default: true
+    format?: boolean        // Default: true
+    cacheTtlDays?: number   // Default: 30
+  }
+  github?: {
+    token?: string
+    apiUrl?: string         // For GitHub Enterprise
+  }
+}
+```
+
+#### Example
+
+```typescript
+// gaji.config.ts
+import { defineConfig } from "./generated/index.js";
+
+export default defineConfig({
+  workflows: "workflows",
+  output: ".github",
+  build: {
+    cacheTtlDays: 14,
+  },
+});
+```
 
 ---
 
@@ -652,8 +797,9 @@ interface JobStep {
 A step returned by `getAction()` when `id` is provided. Extends `JobStep` with typed output access.
 
 ```typescript
-interface ActionStep<O = {}> extends JobStep {
+interface ActionStep<O = {}, Id extends string = string> extends JobStep {
   readonly outputs: O
+  readonly id: Id
 }
 ```
 
@@ -761,30 +907,34 @@ import { getAction, Job, Workflow } from "../generated/index.js";
 const checkout = getAction("actions/checkout@v5");
 const setupNode = getAction("actions/setup-node@v4");
 
-const test = new Job("ubuntu-latest")
-  .addStep(checkout({}))
-  .addStep(setupNode({ with: { "node-version": "20" } }))
-  .addStep({ run: "npm ci" })
-  .addStep({ run: "npm test" });
-
-const build = new Job("ubuntu-latest")
-  .needs(["test"])
-  .addStep(checkout({}))
-  .addStep(setupNode({ with: { "node-version": "20" } }))
-  .addStep({ run: "npm ci" })
-  .addStep({ run: "npm run build" });
-
-const workflow = new Workflow({
+new Workflow({
   name: "CI",
   on: {
     push: { branches: ["main"] },
     pull_request: { branches: ["main"] },
   },
 })
-  .addJob("test", test)
-  .addJob("build", build);
-
-workflow.build("ci");
+  .jobs(j => j
+    .add("test",
+      new Job("ubuntu-latest")
+        .steps(s => s
+          .add(checkout({}))
+          .add(setupNode({ with: { "node-version": "20" } }))
+          .add({ run: "npm ci" })
+          .add({ run: "npm test" })
+        )
+    )
+    .add("build",
+      new Job("ubuntu-latest", { needs: ["test"] })
+        .steps(s => s
+          .add(checkout({}))
+          .add(setupNode({ with: { "node-version": "20" } }))
+          .add({ run: "npm ci" })
+          .add({ run: "npm run build" })
+        )
+    )
+  )
+  .build("ci");
 ```
 
 ## Next Steps

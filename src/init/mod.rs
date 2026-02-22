@@ -336,13 +336,14 @@ fn create_config(root: &Path) -> Result<()> {
         println!("{} gaji.config.ts already exists", "⏭️ ".dimmed());
         return Ok(());
     }
-    // Check for legacy .gaji.toml
+    // Check for legacy .gaji.toml and migrate
     let legacy_path = root.join(".gaji.toml");
     if legacy_path.exists() {
         println!(
-            "{} .gaji.toml found — consider migrating to gaji.config.ts",
-            "⚠️ ".yellow()
+            "{} .gaji.toml found — migrating to gaji.config.ts",
+            "🔄".cyan()
         );
+        migration::migrate_toml_config(root)?;
         return Ok(());
     }
     std::fs::write(&config_path, templates::GAJI_CONFIG_TEMPLATE)?;
