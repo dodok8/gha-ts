@@ -689,6 +689,153 @@ async fn test_list_action_refs_from_directory() {
     assert_eq!(action_to_files["actions/cache@v4"], vec!["deploy.ts"]);
 }
 
+/// Test that step callbacks receive previous step outputs via the `output` context.
+#[test]
+fn test_step_builder_callback_context() {
+    use gaji::executor;
+
+    let runtime_js = format!(
+        r#"var __action_outputs = {{
+    'actions/checkout@v5': ['commit', 'ref'],
+}};
+{}
+{}"#,
+        gaji::generator::templates::GET_ACTION_RUNTIME_TEMPLATE,
+        gaji::generator::templates::JOB_WORKFLOW_RUNTIME_TEMPLATE,
+    );
+
+    let runtime_stripped = strip_module_syntax(&runtime_js);
+
+    let workflow_js = r#"
+var checkout = getAction("actions/checkout@v5");
+
+new Workflow({
+    name: "Step Callback Test",
+    on: { push: {} },
+}).jobs(function(j) { return j
+    .add("build",
+        new Job("ubuntu-latest")
+            .steps(function(s) { return s
+                .add(checkout({ id: "co" }))
+                .add(function(output) { return { name: "Use ref", run: "echo " + output.co.ref } })
+            })
+    )
+}).build("step-callback-test");
+"#;
+
+    let bundled = format!("{}\n\n{}", runtime_stripped, workflow_js);
+    let outputs = executor::execute_js(&bundled).unwrap();
+
+    assert_eq!(outputs.len(), 1);
+    let json: serde_json::Value = serde_json::from_str(&outputs[0].json).unwrap();
+
+    let steps = json["jobs"]["build"]["steps"].as_array().unwrap();
+    assert_eq!(steps[0]["id"], "co");
+    assert_eq!(steps[1]["run"], "echo ${{ steps.co.outputs.ref }}");
+}
+
+/// Test that the `outputs()` callback receives the step context accumulated by `steps()`.
+#[test]
+fn test_outputs_callback_context() {
+    use gaji::executor;
+
+    let runtime_js = format!(
+        r#"var __action_outputs = {{
+    'actions/checkout@v5': ['commit', 'ref'],
+}};
+{}
+{}"#,
+        gaji::generator::templates::GET_ACTION_RUNTIME_TEMPLATE,
+        gaji::generator::templates::JOB_WORKFLOW_RUNTIME_TEMPLATE,
+    );
+
+    let runtime_stripped = strip_module_syntax(&runtime_js);
+
+    let workflow_js = r#"
+var checkout = getAction("actions/checkout@v5");
+
+new Workflow({
+    name: "Outputs Callback Test",
+    on: { push: {} },
+}).jobs(function(j) { return j
+    .add("build",
+        new Job("ubuntu-latest")
+            .steps(function(s) { return s
+                .add(checkout({ id: "co" }))
+            })
+            .outputs(function(output) { return { ref: output.co.ref } })
+    )
+}).build("outputs-callback-test");
+"#;
+
+    let bundled = format!("{}\n\n{}", runtime_stripped, workflow_js);
+    let outputs = executor::execute_js(&bundled).unwrap();
+
+    assert_eq!(outputs.len(), 1);
+    let json: serde_json::Value = serde_json::from_str(&outputs[0].json).unwrap();
+
+    let build_outputs = &json["jobs"]["build"]["outputs"];
+    assert_eq!(build_outputs["ref"], "${{ steps.co.outputs.ref }}");
+}
+
+/// Test that job callbacks receive previous job outputs via the `output` context.
+#[test]
+fn test_job_builder_callback_context() {
+    use gaji::executor;
+
+    let runtime_js = format!(
+        r#"var __action_outputs = {{
+    'actions/checkout@v5': ['commit', 'ref'],
+}};
+{}
+{}"#,
+        gaji::generator::templates::GET_ACTION_RUNTIME_TEMPLATE,
+        gaji::generator::templates::JOB_WORKFLOW_RUNTIME_TEMPLATE,
+    );
+
+    let runtime_stripped = strip_module_syntax(&runtime_js);
+
+    let workflow_js = r#"
+var checkout = getAction("actions/checkout@v5");
+
+new Workflow({
+    name: "Job Callback Test",
+    on: { push: {} },
+}).jobs(function(j) { return j
+    .add("build",
+        new Job("ubuntu-latest")
+            .steps(function(s) { return s
+                .add(checkout({ id: "co" }))
+            })
+            .outputs(function(output) { return { sha: output.co.commit } })
+    )
+    .add("deploy", function(output) {
+        return new Job("ubuntu-latest", { needs: ["build"] })
+            .steps(function(s) { return s
+                .add({ name: "Deploy", run: "deploy --sha " + output.build.sha })
+            })
+    })
+}).build("job-callback-test");
+"#;
+
+    let bundled = format!("{}\n\n{}", runtime_stripped, workflow_js);
+    let outputs = executor::execute_js(&bundled).unwrap();
+
+    assert_eq!(outputs.len(), 1);
+    let json: serde_json::Value = serde_json::from_str(&outputs[0].json).unwrap();
+
+    // Build job outputs should map to step expressions
+    let build_outputs = &json["jobs"]["build"]["outputs"];
+    assert_eq!(build_outputs["sha"], "${{ steps.co.outputs.commit }}");
+
+    // Deploy job should use needs expressions from JobBuilder context
+    let deploy_steps = json["jobs"]["deploy"]["steps"].as_array().unwrap();
+    assert_eq!(
+        deploy_steps[0]["run"],
+        "deploy --sha ${{ needs.build.outputs.sha }}"
+    );
+}
+
 /// Test WorkflowBuilder.build_all with an empty directory.
 #[tokio::test]
 async fn test_build_all_empty_directory() {

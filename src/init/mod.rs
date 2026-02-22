@@ -331,14 +331,22 @@ async fn create_example_workflow(root: &Path) -> Result<()> {
 }
 
 fn create_config(root: &Path) -> Result<()> {
-    let config_path = root.join(".gaji.toml");
+    let config_path = root.join(crate::config::TS_CONFIG_FILE);
     if config_path.exists() {
-        println!("{} .gaji.toml already exists", "⏭️ ".dimmed());
+        println!("{} gaji.config.ts already exists", "⏭️ ".dimmed());
         return Ok(());
     }
-    let config = Config::default();
-    config.save_to(&config_path)?;
-    println!("{} Created .gaji.toml", "✓".green());
+    // Check for legacy .gaji.toml
+    let legacy_path = root.join(".gaji.toml");
+    if legacy_path.exists() {
+        println!(
+            "{} .gaji.toml found — consider migrating to gaji.config.ts",
+            "⚠️ ".yellow()
+        );
+        return Ok(());
+    }
+    std::fs::write(&config_path, templates::GAJI_CONFIG_TEMPLATE)?;
+    println!("{} Created gaji.config.ts", "✓".green());
     Ok(())
 }
 
@@ -396,12 +404,17 @@ pub(crate) fn print_next_steps() {
     println!("  3. Run: gaji build");
     println!();
     println!(
-        "{} For private repos or GitHub Enterprise, create .gaji.local.toml:",
+        "{} For private repos or GitHub Enterprise, create gaji.config.local.ts:",
         "💡".yellow()
     );
-    println!("   [github]");
-    println!("   token = \"ghp_your_token_here\"");
-    println!("   # api_url = \"https://github.example.com\"  # for GitHub Enterprise");
+    println!("   import {{ defineConfig }} from \"./generated/index.js\";");
+    println!();
+    println!("   export default defineConfig({{");
+    println!("       github: {{");
+    println!("           token: \"ghp_your_token_here\",");
+    println!("           // apiUrl: \"https://github.example.com\",  // for GitHub Enterprise");
+    println!("       }},");
+    println!("   }});");
     println!();
     println!("Learn more: https://github.com/dodok8/gaji");
 }
@@ -553,7 +566,7 @@ mod tests {
         let content = std::fs::read_to_string(temp.path().join("workflows/ci.ts")).unwrap();
         assert!(content.contains("getAction"));
         assert!(content.contains("actions/checkout@v5"));
-        assert!(content.contains("workflow.build"));
+        assert!(content.contains(".build(\"ci\")"));
     }
 
     #[tokio::test]
@@ -572,7 +585,7 @@ mod tests {
         assert!(temp.path().join("workflows").is_dir());
         assert!(temp.path().join("generated").is_dir());
         assert!(temp.path().join(".github/workflows").is_dir());
-        assert!(temp.path().join(".gaji.toml").is_file());
+        assert!(temp.path().join("gaji.config.ts").is_file());
         assert!(temp.path().join(".gitignore").is_file());
         // Should NOT create Node.js-specific files
         assert!(!temp.path().join("package.json").exists());
@@ -624,7 +637,7 @@ mod tests {
         assert!(!temp.path().join("package.json").exists());
         assert!(!temp.path().join("tsconfig.json").exists());
         // Gaji files should exist
-        assert!(temp.path().join(".gaji.toml").is_file());
+        assert!(temp.path().join("gaji.config.ts").is_file());
         assert!(temp.path().join("workflows").is_dir());
     }
 
@@ -632,8 +645,8 @@ mod tests {
     fn test_create_config() {
         let temp = tempfile::TempDir::new().unwrap();
         create_config(temp.path()).unwrap();
-        assert!(temp.path().join(".gaji.toml").is_file());
-        let content = std::fs::read_to_string(temp.path().join(".gaji.toml")).unwrap();
-        assert!(content.contains("workflows_dir"));
+        assert!(temp.path().join("gaji.config.ts").is_file());
+        let content = std::fs::read_to_string(temp.path().join("gaji.config.ts")).unwrap();
+        assert!(content.contains("defineConfig"));
     }
 }

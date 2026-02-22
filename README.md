@@ -67,26 +67,23 @@ import { getAction, Job, Workflow } from "../generated/index.js";
 const checkout = getAction("actions/checkout@v5");
 const setupNode = getAction("actions/setup-node@v4");
 
-const build = new Job("ubuntu-latest")
-  .addStep(checkout({
-    name: "Checkout code",
-    with: { "fetch-depth": 1 },
-  }))
-  .addStep(setupNode({
-    with: { "node-version": "22" },
-  }))
-  .addStep({ name: "Install dependencies", run: "npm ci" })
-  .addStep({ name: "Run tests", run: "npm test" });
-
-const workflow = new Workflow({
+new Workflow({
   name: "CI",
   on: {
     push: { branches: ["main"] },
     pull_request: { branches: ["main"] },
   },
-}).addJob("build", build);
-
-workflow.build("ci");
+}).jobs(j => j
+  .add("build",
+    new Job("ubuntu-latest")
+      .steps(s => s
+        .add(checkout({ name: "Checkout code", with: { "fetch-depth": 1 } }))
+        .add(setupNode({ with: { "node-version": "22" } }))
+        .add({ name: "Install dependencies", run: "npm ci" })
+        .add({ name: "Run tests", run: "npm test" })
+      )
+  )
+).build("ci");
 ```
 
 Run `gaji build` and it outputs `.github/workflows/ci.yml`.
@@ -146,20 +143,24 @@ const action = new Action({
   inputs: {
     "node-version": { description: "Node.js version", required: false, default: "20" },
   },
-});
-action.addStep({ name: "Install deps", run: "npm ci", shell: "bash" });
+})
+  .steps(s => s
+    .add({ name: "Install deps", run: "npm ci", shell: "bash" })
+  );
 action.build("setup");
 
 // Reference the composite action in a workflow
-const job = new Job("ubuntu-latest")
-  .addStep(ActionRef.from(action).toJSON());
-
-const workflow = new Workflow({
+new Workflow({
   name: "CI",
   on: { push: {} },
-}).addJob("build", job);
-
-workflow.build("ci");
+}).jobs(j => j
+  .add("build",
+    new Job("ubuntu-latest")
+      .steps(s => s
+        .add(ActionRef.from(action).toJSON())
+      )
+  )
+).build("ci");
 ```
 
 ### Reusable Workflows
@@ -169,22 +170,23 @@ Call reusable workflows using `WorkflowCall`:
 ```typescript
 import { WorkflowCall, Workflow } from "../generated/index.js";
 
-const deploy = new WorkflowCall("./.github/workflows/deploy.yml")
-  .with({ environment: "production" })
-  .secrets("inherit")
-  .needs(["build"]);
-
-const workflow = new Workflow({
+new Workflow({
   name: "Release",
   on: { push: { tags: ["v*"] } },
-}).addJob("deploy", deploy);
-
-workflow.build("release");
+}).jobs(j => j
+  .add("deploy",
+    new WorkflowCall("./.github/workflows/deploy.yml", {
+      with: { environment: "production" },
+      secrets: "inherit",
+      needs: ["build"],
+    })
+  )
+).build("release");
 ```
 
 ### Job Options
 
-The `Job` constructor accepts an optional second argument for additional configuration:
+The `Job` constructor accepts an optional second argument for configuration:
 
 ```typescript
 const job = new Job("ubuntu-latest", {
@@ -197,23 +199,13 @@ const job = new Job("ubuntu-latest", {
     matrix: { node: ["18", "20", "22"] },
     "fail-fast": false,
   },
-});
+})
+  .steps(s => s
+    .add({ name: "Test", run: "npm test" })
+  );
 ```
 
-Builder methods are also available:
-
-```typescript
-const job = new Job("ubuntu-latest")
-  .addStep({ name: "Test", run: "npm test" })
-  .needs(["setup"])
-  .env({ CI: "true" })
-  .when("github.event_name == 'push'")
-  .permissions({ contents: "read" })
-  .outputs({ result: "${{ steps.test.outputs.result }}" })
-  .strategy({ matrix: { os: ["ubuntu-latest", "macos-latest"] } })
-  .continueOnError(true)
-  .timeoutMinutes(30);
-```
+Steps are added via the `steps()` callback, and job-level settings are passed through the constructor. This keeps configuration separate from step definitions.
 
 ## Commands
 
@@ -286,40 +278,46 @@ gaji clean [OPTIONS]
 
 ## Configuration
 
-### `.gaji.toml`
+### `gaji.config.ts`
 
 Project-level configuration file. Created automatically by `gaji init`.
 
-```toml
-[project]
-workflows_dir = "workflows"    # TypeScript workflow source directory
-output_dir = ".github"         # Output directory for generated YAML
-generated_dir = "generated"    # Directory for generated type definitions
+```typescript
+import { defineConfig } from "./generated/index.js";
 
-[watch]
-debounce_ms = 300              # Debounce delay for file watcher
-ignored_patterns = ["node_modules", ".git", "generated"]
-
-[build]
-validate = true                # Validate workflow YAML (requires 'on' and 'jobs')
-format = true                  # Format YAML output
-
-[github]
-token = "ghp_..."              # GitHub token (prefer .gaji.local.toml for this)
-api_url = "https://github.example.com"  # GitHub Enterprise URL
+export default defineConfig({
+    workflows: "workflows",    // TypeScript workflow source directory
+    output: ".github",         // Output directory for generated YAML
+    generated: "generated",    // Directory for generated type definitions
+    watch: {
+        debounce: 300,         // Debounce delay for file watcher (ms)
+        ignore: ["node_modules", ".git", "generated"],
+    },
+    build: {
+        validate: true,        // Validate workflow YAML (requires 'on' and 'jobs')
+        format: true,          // Format YAML output
+    },
+});
 ```
 
-### `.gaji.local.toml`
+### `gaji.config.local.ts`
 
 Local overrides for sensitive values. Add this to `.gitignore`.
 
-```toml
-[github]
-token = "ghp_your_token_here"
-api_url = "https://github.example.com"  # for GitHub Enterprise
+```typescript
+import { defineConfig } from "./generated/index.js";
+
+export default defineConfig({
+    github: {
+        token: "ghp_your_token_here",
+        apiUrl: "https://github.example.com",  // for GitHub Enterprise
+    },
+});
 ```
 
-Token resolution priority: `GITHUB_TOKEN` env var > `.gaji.local.toml` > `.gaji.toml`
+Token resolution priority: `GITHUB_TOKEN` env var > `gaji.config.local.ts` > `gaji.config.ts`
+
+gaji also reads `.gaji.toml` / `.gaji.local.toml` as a fallback for existing projects.
 
 ## Documentation
 

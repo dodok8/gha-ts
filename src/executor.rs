@@ -79,7 +79,7 @@ pub fn execute_workflow(workflow_path: &Path, runtime_js_path: &Path) -> Result<
 
 /// Remove import/export statements from JavaScript source.
 /// This is needed because we inline the runtime code.
-fn remove_imports(source: &str) -> String {
+pub fn remove_imports(source: &str) -> String {
     let mut result = Vec::new();
     for line in source.lines() {
         let trimmed = line.trim();

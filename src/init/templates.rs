@@ -30,26 +30,7 @@ import { getAction, Job, Workflow } from "../generated/index.js";
 const checkout = getAction("actions/checkout@v5");
 const setupNode = getAction("actions/setup-node@v4");
 
-const build = new Job("ubuntu-latest")
-    .addStep(checkout({
-        name: "Checkout code",
-    }))
-    .addStep(setupNode({
-        name: "Setup Node.js",
-        with: {
-            "node-version": "20",
-        },
-    }))
-    .addStep({
-        name: "Install dependencies",
-        run: "npm ci",
-    })
-    .addStep({
-        name: "Run tests",
-        run: "npm test",
-    });
-
-const workflow = new Workflow({
+new Workflow({
     name: "CI",
     on: {
         push: {
@@ -59,10 +40,30 @@ const workflow = new Workflow({
             branches: ["main"],
         },
     },
-}).addJob("build", build);
+}).jobs(j => j
+    .add("build",
+        new Job("ubuntu-latest")
+            .steps(s => s
+                .add(checkout({ name: "Checkout code" }))
+                .add(setupNode({
+                    name: "Setup Node.js",
+                    with: { "node-version": "20" },
+                }))
+                .add({ name: "Install dependencies", run: "npm ci" })
+                .add({ name: "Run tests", run: "npm test" })
+            )
+    )
+).build("ci");
+"#;
 
-workflow.build("ci");
+pub const GAJI_CONFIG_TEMPLATE: &str = r#"import { defineConfig } from "./generated/index.js";
+
+export default defineConfig({
+    workflows: "workflows",
+    output: ".github",
+    generated: "generated",
+});
 "#;
 
 pub const GITIGNORE_SECTION: &str =
-    "\n# gaji generated files\ngenerated/\n.gaji-cache.json\n.gaji.local.toml\n";
+    "\n# gaji generated files\ngenerated/\n.gaji-cache.json\ngaji.config.local.ts\n";

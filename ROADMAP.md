@@ -694,9 +694,9 @@ Each file is independent:
 - ~~`defineConfig` declaration in `CLASS_DECLARATIONS_TEMPLATE`~~
 - ~~`defineConfig` runtime in `JOB_WORKFLOW_RUNTIME_TEMPLATE`~~
 
-### Phase 3 — Depends on Phase 2 (all parallel) ⬜ 미착수
+### ~~Phase 3 — Depends on Phase 2 (all parallel)~~ ✅
 
-Each group touches different files. All depend on Phase 2 for the new type/runtime shapes.
+~~Each group touches different files. All depend on Phase 2 for the new type/runtime shapes.~~
 
 #### ~~3A. `src/generator/mod.rs` — getAction overloads + type renames~~ ✅
 
@@ -705,41 +705,39 @@ Each group touches different files. All depend on Phase 2 for the new type/runti
 - ~~`GajiConfig` added to imports/re-exports~~
 - ~~Comment updated~~
 
-#### 3B. `tests/integration.rs` — New tests (moderate)
+#### ~~3B. `tests/integration.rs` — New tests (moderate)~~ ✅
 
-- Add `test_step_builder_callback_context`: `steps()` builder callback receives previous step outputs via `output` parameter
-- Add `test_outputs_callback_context`: `outputs()` callback receives previous step outputs via `output` parameter
-- Add `test_job_builder_callback_context`: `jobs()` builder callback receives previous job outputs via `output` parameter (replaces `jobOutputs` pattern)
+- ~~Add `test_step_builder_callback_context`: `steps()` builder callback receives previous step outputs via `output` parameter~~
+- ~~Add `test_outputs_callback_context`: `outputs()` callback receives previous step outputs via `output` parameter~~
+- ~~Add `test_job_builder_callback_context`: `jobs()` builder callback receives previous job outputs via `output` parameter (replaces `jobOutputs` pattern)~~
 
-#### 3C. `src/init/templates.rs` — EXAMPLE_WORKFLOW_TEMPLATE (easy)
+#### ~~3C. `src/init/templates.rs` — EXAMPLE_WORKFLOW_TEMPLATE (easy)~~ ✅
 
-- Update to use `steps(s => s.add(...))` and `jobs(j => j.add(...))` patterns
+- ~~Update to use `steps(s => s.add(...))` and `jobs(j => j.add(...))` patterns~~
 
-#### 3D. `CLAUDE.md` — Project documentation (easy)
+#### ~~3D. `CLAUDE.md` — Project documentation (easy)~~ ✅
 
-- Update "Key Design Patterns" section: remove `CompositeJob`, rename classes
-- Update "Runtime Class Hierarchy" table: apply renames, remove CompositeJob
-- Update "Adding a new action type" and "Adding a new job type" sections
-- Update "Configuration Files" table: `.gaji.toml` → `gaji.config.ts`, `.gaji.local.toml` → `gaji.config.local.ts`
-- Update "Configuration hierarchy" line: `env vars > gaji.config.local.ts > gaji.config.ts > defaults`
+- ~~Update "Key Design Patterns" section: remove `CompositeJob`, rename classes~~
+- ~~Update "Runtime Class Hierarchy" table: apply renames, remove CompositeJob~~
+- ~~Update "Adding a new action type" and "Adding a new job type" sections~~
+- ~~Update "Configuration Files" table: `.gaji.toml` → `gaji.config.ts`, `.gaji.local.toml` → `gaji.config.local.ts`~~
+- ~~Update "Configuration hierarchy" line: `env vars > gaji.config.local.ts > gaji.config.ts > defaults`~~
 
-#### 3E. `src/config.rs` — Replace TOML loading with TS execution (moderate) ★
+#### ~~3E. `src/config.rs` — Replace TOML loading with TS execution (moderate) ★~~ ✅
 
-- Remove `toml` dependency for config loading
-- Add `load_from_ts()` that:
-  1. Checks for `gaji.config.ts` (falls back to `.gaji.toml` for backward compat)
-  2. Strips types with oxc
-  3. Executes in QuickJS with a wrapper that captures `export default`
-  4. Deserializes JSON result into `Config` struct
-- Add `merge_local_ts()` for `gaji.config.local.ts`
-- Keep field mapping: `workflows` → `workflows_dir`, `output` → `output_dir`, `generated` → `generated_dir`, `watch.debounce` → `watch.debounce_ms`, `build.cacheTtlDays` → `build.cache_ttl_days`
-- Keep `resolve_token()` priority: env var > local config > config > None
+- ~~Add `TsGajiConfig` intermediate struct with camelCase JSON deserialization~~
+- ~~Add `load_from_ts()` that strips types, executes in QuickJS, deserializes JSON~~
+- ~~`Config::load()` tries `gaji.config.ts` first, falls back to `.gaji.toml`~~
+- ~~Removed `save()`, `save_to()`, and `Serialize` derives~~
+- ~~Added 3 config tests: basic, with local, empty config~~
 
-#### 3F. `src/init/mod.rs` + `src/init/templates.rs` — Generate TS config (moderate)
+#### ~~3F. `src/init/mod.rs` + `src/init/templates.rs` — Generate TS config (moderate)~~ ✅
 
-- `gaji init` generates `gaji.config.ts` instead of `.gaji.toml`
-- Add `GAJI_CONFIG_TEMPLATE` constant for default `gaji.config.ts` content
-- Update `.gitignore` template: replace `.gaji.local.toml` with `gaji.config.local.ts`
+- ~~`gaji init` generates `gaji.config.ts` instead of `.gaji.toml`~~
+- ~~Added `GAJI_CONFIG_TEMPLATE` constant for default `gaji.config.ts` content~~
+- ~~Updated `.gitignore` template: `.gaji.local.toml` → `gaji.config.local.ts`~~
+- ~~Updated `print_next_steps()` with TS config example~~
+- ~~Updated interactive init to write TS config directly~~
 
 ### Phase 4 — Depends on Phase 3 (all parallel) ⬜ 미착수
 

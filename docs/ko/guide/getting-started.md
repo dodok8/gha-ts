@@ -63,37 +63,27 @@ import { getAction, Job, Workflow } from "../generated/index.js";
 const checkout = getAction("actions/checkout@v5");
 const setupNode = getAction("actions/setup-node@v4");
 
-// 빌드 작업 정의
-const build = new Job("ubuntu-latest")
-  .addStep(checkout({
-    name: "Checkout code",
-  }))
-  .addStep(setupNode({
-    name: "Setup Node.js",
-    with: {
-      "node-version": "20",  // ✅ 자동완성 사용 가능!
-    },
-  }))
-  .addStep({
-    name: "Install dependencies",
-    run: "npm ci",
-  })
-  .addStep({
-    name: "Run tests",
-    run: "npm test",
-  });
-
-// 워크플로우 생성
-const workflow = new Workflow({
+// 콜백 빌더 API로 워크플로우 생성
+new Workflow({
   name: "CI",
   on: {
     push: { branches: ["main"] },
     pull_request: { branches: ["main"] },
   },
-}).addJob("build", build);
-
-// YAML 파일 빌드
-workflow.build("ci");
+}).jobs(j => j
+  .add("build",
+    new Job("ubuntu-latest")
+      .steps(s => s
+        .add(checkout({ name: "Checkout code" }))
+        .add(setupNode({
+          name: "Setup Node.js",
+          with: { "node-version": "20" },  // ✅ 자동완성 사용 가능!
+        }))
+        .add({ name: "Install dependencies", run: "npm ci" })
+        .add({ name: "Run tests", run: "npm test" })
+      )
+  )
+).build("ci");
 ```
 
 ## 타입 생성 및 빌드
