@@ -739,64 +739,40 @@ Each file is independent:
 - ~~Updated `print_next_steps()` with TS config example~~
 - ~~Updated interactive init to write TS config directly~~
 
-### Phase 4 — Depends on Phase 3 (all parallel) ⬜ 미착수
+### ~~Phase 4 — Depends on Phase 3 (all parallel)~~ ✅
 
-#### 4A. `src/init/migration.rs` — TOML → TS config migration (moderate)
+#### ~~4A. `src/init/migration.rs` — TOML → TS config migration + migration codegen fix~~ ✅
 
-Depends on 3E.
+- ~~Detect existing `.gaji.toml` during init, generate `gaji.config.ts`~~
+- ~~Generate `gaji.config.local.ts` from `.gaji.local.toml` if present~~
+- ~~Prompt user before removing old TOML files~~
+- ~~Fix migration codegen: `.addStep()` → `.steps(s => s.add(...))`, `.addJob()` → `.jobs(j => j.add(...))`~~
 
-- Detect existing `.gaji.toml` during init
-- Generate equivalent `gaji.config.ts` from TOML values
-- Generate `gaji.config.local.ts` from `.gaji.local.toml` if present
-- Prompt user before removing old TOML files
+#### ~~4B. Config tests~~ ✅
 
-#### 4B. Config tests (moderate)
+- ~~`config.rs`: env var precedence test~~
+- ~~`integration.rs`: full pipeline test with `gaji.config.ts`~~
 
-Depends on 3E + 3F.
+#### ~~4C. `docs/reference/api.md` — API reference rewrite~~ ✅
 
-- Unit tests in `config.rs`: parse TS config, merge local, env var precedence
-- Integration test: full pipeline with `gaji.config.ts` instead of `.gaji.toml`
+- ~~`StepBuilder`, `JobBuilder` sections, constructor-only `JobConfig`, `defineConfig`/`GajiConfig`~~
+- ~~All examples updated to callback builder pattern~~
 
-#### 4C. `docs/reference/api.md` — API reference rewrite (moderate)
+#### ~~4D. `docs/guide/writing-workflows.md` — Guide rewrite~~ ✅
 
-Depends on Phase 2 (API shape).
+- ~~All examples updated to `.steps(s => s.add(...))`, `.jobs(j => j.add(...))`, constructor config~~
 
-- Add `StepBuilder` section with 4 `add` overloads
-- Update `Job` section: `Cx` generic, constructor-only `JobConfig`, `steps()` method, callback `outputs`
-- Add `JobBuilder` section with 4 `add` overloads
-- Update `Workflow` section: `Cx` generic, `jobs()` method
-- Remove `CompositeJob` section entirely
-- Rename `CompositeAction` → `Action` section with `steps()` method
-- Rename `JavaScriptAction` → `NodeAction` section
-- Rename `CallJob` → `WorkflowCall` section
-- Rename `CallAction` → `ActionRef` section, update `from()` signature
-- Update `jobOutputs()` section: note it's a compatibility helper, show `jobs()` callback as primary pattern
-- Add examples for each changed class showing callback/context usage
+#### ~~4E. Config documentation + all remaining doc updates~~ ✅
 
-#### 4D. `docs/guide/writing-workflows.md` — Guide rewrite (moderate)
+- ~~`docs/guide/migration.md`: Configuration migration section, all old API examples updated~~
+- ~~`docs/reference/actions.md`, `docs/guide/why.md`: old API examples updated~~
+- ~~`docs/examples/*.md`: all old API examples updated (simple-ci, matrix-build, composite-action, javascript-action)~~
+- ~~Korean mirrors: same changes applied to all `docs/ko/` files~~
 
-Depends on Phase 2 (API shape).
+#### ~~4F. Korean doc rewrites~~ ✅
 
-- Update "Steps" section: show `steps(s => s.add(...))` pattern with direct and callback forms
-- Replace `CompositeJob` section: show extending `Job` directly (CompositeJob removed)
-- Update `CallJob` → `WorkflowCall` in reusable workflow section
-- Rewrite "Outputs" section: show `outputs(output => ...)` and `jobs(j => j.add("id", output => ...))` as primary patterns, `jobOutputs()` as compatibility helper
-
-#### 4E. Config documentation (easy)
-
-Depends on 3E + 3F.
-
-- `docs/guide/writing-workflows.md`: Update configuration section with `gaji.config.ts` examples
-- `docs/reference/api.md`: Add `defineConfig` and `GajiConfig` to API reference
-- `docs/guide/migration.md`: Add `.gaji.toml` → `gaji.config.ts` migration instructions
-- `docs/ko/` mirrors: Apply same config documentation changes to Korean docs
-
-#### 4F. Korean doc rewrites (moderate)
-
-Depends on 4C + 4D.
-
-- `docs/ko/reference/api.md` — mirror 4C
-- `docs/ko/guide/writing-workflows.md` — mirror 4D
+- ~~`docs/ko/reference/api.md`, `docs/ko/guide/writing-workflows.md`, `docs/ko/guide/migration.md` — full rewrites~~
+- ~~`docs/ko/examples/*.md`, `docs/ko/reference/actions.md`, `docs/ko/guide/why.md` — old API examples updated~~
 
 ### Documentation Change Examples
 

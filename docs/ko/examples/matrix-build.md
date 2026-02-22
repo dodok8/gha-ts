@@ -11,31 +11,34 @@ const checkout = getAction("actions/checkout@v5");
 const setupNode = getAction("actions/setup-node@v4");
 
 // 매트릭스 테스트 작업 정의
-const test = new Job("${{ matrix.os }}")
-  .strategy({
-    matrix: {
-      os: ["ubuntu-latest", "macos-latest", "windows-latest"],
-      node: ["18", "20", "22"],
+const test = new Job("${{ matrix.os }}", {
+    strategy: {
+      matrix: {
+        os: ["ubuntu-latest", "macos-latest", "windows-latest"],
+        node: ["18", "20", "22"],
+      },
     },
   })
-  .addStep(checkout({
-    name: "Checkout code",
-  }))
-  .addStep(setupNode({
-    name: "Setup Node.js ${{ matrix.node }}",
-    with: {
-      "node-version": "${{ matrix.node }}",
-      cache: "npm",
-    },
-  }))
-  .addStep({
-    name: "Install dependencies",
-    run: "npm ci",
-  })
-  .addStep({
-    name: "Run tests",
-    run: "npm test",
-  });
+  .steps(s => s
+    .add(checkout({
+      name: "Checkout code",
+    }))
+    .add(setupNode({
+      name: "Setup Node.js ${{ matrix.node }}",
+      with: {
+        "node-version": "${{ matrix.node }}",
+        cache: "npm",
+      },
+    }))
+    .add({
+      name: "Install dependencies",
+      run: "npm ci",
+    })
+    .add({
+      name: "Run tests",
+      run: "npm test",
+    })
+  );
 
 // 워크플로우 생성
 const workflow = new Workflow({
@@ -48,7 +51,7 @@ const workflow = new Workflow({
       branches: ["main"],
     },
   },
-}).addJob("test", test);
+}).jobs(j => j.add("test", test));
 
 workflow.build("matrix-test");
 ```
