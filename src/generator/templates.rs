@@ -273,6 +273,8 @@ export interface JobConfig {
     'continue-on-error'?: boolean;
 }
 
+type NotIn<Id extends string, Cx> = Id extends keyof Cx ? never : Id;
+
 export declare class StepBuilder<Cx = {}> {
     add<Id extends string, StepO>(step: ActionStep<StepO, Id>): StepBuilder<Cx & Record<Id, StepO>>;
     add(step: JobStep): StepBuilder<Cx>;
@@ -289,15 +291,13 @@ export declare class Job<Cx = {}, O extends Record<string, string> = {}> {
 
 export declare class JobBuilder<Cx = {}> {
     add<Id extends string, O extends Record<string, string>>(
-        id: Id, job: Job<any, O>
+        id: NotIn<Id, Cx>, job: Job<any, O>
     ): JobBuilder<Cx & Record<Id, O>>;
-    add(id: string, job: Job | WorkflowCall): JobBuilder<Cx>;
+    add<Id extends string>(id: NotIn<Id, Cx>, job: Job | WorkflowCall): JobBuilder<Cx>;
     add<Id extends string, O extends Record<string, string>>(
-        id: Id, jobFn: (output: Cx) => Job<any, O>
+        id: NotIn<Id, Cx>, jobFn: (output: Cx) => Job<any, O>
     ): JobBuilder<Cx & Record<Id, O>>;
-    add(id: string, jobFn: (output: Cx) => Job | WorkflowCall): JobBuilder<Cx>;
-    add(job: Job | WorkflowCall): JobBuilder<Cx>;
-    add(jobFn: (output: Cx) => Job | WorkflowCall): JobBuilder<Cx>;
+    add<Id extends string>(id: NotIn<Id, Cx>, jobFn: (output: Cx) => Job | WorkflowCall): JobBuilder<Cx>;
 }
 
 export declare class Workflow<Cx = {}> {
@@ -438,26 +438,14 @@ export class JobBuilder {
     constructor() {
         this._jobs = {};
         this._ctx = {};
-        this._counter = 0;
     }
 
-    add(idOrJob, jobOrFn) {
-        var id, job;
-        if (typeof idOrJob === 'string') {
-            id = idOrJob;
-            if (typeof jobOrFn === 'function') {
-                job = jobOrFn(this._ctx);
-            } else {
-                job = jobOrFn;
-            }
+    add(id, jobOrFn) {
+        var job;
+        if (typeof jobOrFn === 'function') {
+            job = jobOrFn(this._ctx);
         } else {
-            this._counter++;
-            id = "job-" + this._counter;
-            if (typeof idOrJob === 'function') {
-                job = idOrJob(this._ctx);
-            } else {
-                job = idOrJob;
-            }
+            job = jobOrFn;
         }
         this._jobs[id] = job;
         if (job._outputs) {
